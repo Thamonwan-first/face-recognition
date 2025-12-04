@@ -1,36 +1,44 @@
 import cv2
 import face_recognition
 import sys
+import os
+import numpy as np  # <--- 1. ต้องเพิ่มบรรทัดนี้เพื่อช่วยคำนวณหาคนที่เหมือนที่สุด
 
+# ---------------------------------------------------------
 sys.stdout.reconfigure(encoding='utf-8')
+# ---------------------------------------------------------
 
-# ----------------ส่วนตั้งค่า----------------
-# ใส่ชื่อไฟล์รูปภาพ และ ชื่อคน ตรงนี้ครับ
-image_file = "me.jpg"       # ชื่อไฟล์รูปต้นฉบับ
-person_name = "first"     # ชื่อที่จะให้แสดงบนจอ
-# ----------------------------------------
+folder_path = "faces"
+known_face_encodings = []
+known_face_names = []
 
-print(f"กำลังเรียนรู้ใบหน้าจากไฟล์ {image_file} ...")
+print(f"📂 กำลังอ่านรูปภาพทั้งหมดจากโฟลเดอร์ '{folder_path}' ...")
 
-try:
-    # 1. โหลดภาพและถอดรหัสใบหน้า (Encoding)
-    your_image = face_recognition.load_image_file(image_file)
-    your_face_encoding = face_recognition.face_encodings(your_image)[0]
-    
-    # เก็บข้อมูลไว้ในลิสต์ (ถ้ามีหลายคนก็เพิ่มตรงนี้ได้)
-    known_face_encodings = [your_face_encoding]
-    known_face_names = [person_name]
-    
-    print("จำหน้าเสร็จแล้ว! กำลังเปิดกล้อง...")
-
-except IndexError:
-    print("Error: ไม่พบใบหน้าในรูปภาพต้นฉบับ กรุณาเปลี่ยนรูปใหม่")
-    exit()
-except FileNotFoundError:
-    print(f"Error: หาไฟล์ {image_file} ไม่เจอ")
+if not os.path.exists(folder_path):
+    print(f"❌ ไม่พบโฟลเดอร์ {folder_path} กรุณาสร้างโฟลเดอร์และใส่รูปภาพก่อน")
+    os.makedirs(folder_path)
     exit()
 
-# 2. เปิดกล้อง
+for filename in os.listdir(folder_path):
+    if filename.endswith((".jpg", ".png", ".jpeg")):
+        image_path = os.path.join(folder_path, filename)
+        name = os.path.splitext(filename)[0]
+        
+        try:
+            image = face_recognition.load_image_file(image_path)
+            encoding = face_recognition.face_encodings(image)[0]
+            known_face_encodings.append(encoding)
+            known_face_names.append(name)
+            print(f"✔️  จดจำ: {name}")
+        except IndexError:
+            print(f"⚠️  ข้ามไฟล์: {filename} (หาใบหน้าไม่เจอ)")
+        except Exception as e:
+            print(f"❌ Error: {e}")
+
+print(f"✅ เสร็จสิ้น! จำหน้าได้ทั้งหมด {len(known_face_names)} คน")
+print("---------------------------------------")
+print("📷 กำลังเปิดกล้อง...")
+
 video_capture = cv2.VideoCapture(0)
 
 while True:
@@ -38,51 +46,54 @@ while True:
     if not ret:
         break
 
-    # ลดขนาดภาพลง 1/4 เพื่อให้ทำงานเร็ว ไม่กระตุก
     small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
     rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
 
-    # ค้นหาใบหน้าในกล้อง
+    # ค้นหาตำแหน่งและ encoding ของทุกคนในภาพปัจจุบัน
     face_locations = face_recognition.face_locations(rgb_small_frame)
     face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
 
     face_names = []
+    
+    # วนลูปเช็ค "ทุกคน" ที่เจอในกล้องตอนนี้
     for face_encoding in face_encodings:
-        # เทียบใบหน้าที่เจอกับฐานข้อมูล
+        # 2. ส่วนที่แก้ไข: ใช้ face_distance เพื่อหาคนที่เหมือนที่สุด
         matches = face_recognition.compare_faces(known_face_encodings, face_encoding)
-        name = "Unknown" # ถ้าไม่รู้จักให้ขึ้น Unknown
+        name = "Unknown"
 
-        if True in matches:
-            first_match_index = matches.index(True)
-            name = known_face_names[first_match_index]
+        # คำนวณความห่างของใบหน้า (ยิ่งเลขน้อย ยิ่งเหมือนมาก)
+        face_distances = face_recognition.face_distance(known_face_encodings, face_encoding)
+        
+        if len(face_distances) > 0:
+            # หา index ของคนที่ face_distance น้อยที่สุด (เหมือนที่สุด)
+            best_match_index = np.argmin(face_distances)
+            
+            # ถ้าคนที่เหมือนที่สุด อยู่ในเกณฑ์ที่ match กันด้วย
+            if matches[best_match_index]:
+                name = known_face_names[best_match_index]
 
         face_names.append(name)
 
-    # วาดกรอบและชื่อ
+    # วาดกรอบสี่เหลี่ยมให้ทุกคนที่เจอ
     for (top, right, bottom, left), name in zip(face_locations, face_names):
-        # ขยายขนาดกลับ (x4)
         top *= 4
         right *= 4
         bottom *= 4
         left *= 4
 
-        # เลือกสี: สีเขียว(รู้จัก) / สีแดง(ไม่รู้จัก)
+        # ถ้าไม่รู้จักเป็นสีแดง รู้จักเป็นสีเขียว
         if name == "Unknown":
-            color = (0, 0, 255) # แดง
+            color = (0, 0, 255) 
         else:
-            color = (0, 255, 0) # เขียว
+            color = (0, 255, 0)
 
-        # วาดกรอบ
         cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
-        
-        # เขียนชื่อ
         cv2.rectangle(frame, (left, bottom - 35), (right, bottom), color, cv2.FILLED)
         font = cv2.FONT_HERSHEY_DUPLEX
         cv2.putText(frame, name, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
 
-    cv2.imshow('Face Recognition System', frame)
+    cv2.imshow('Face Recognition Multi-Person', frame)
 
-    # กด 'q' เพื่อออก
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
