@@ -1,101 +1,448 @@
+
+import tkinter as tk
+from tkinter import messagebox, simpledialog, scrolledtext
 import cv2
 import face_recognition
-import sys
 import os
-import numpy as np  # <--- 1. ต้องเพิ่มบรรทัดนี้เพื่อช่วยคำนวณหาคนที่เหมือนที่สุด
+import sys
+import numpy as np
+import time
+from PIL import Image as PILImage
+import shutil
+import threading
 
-# ---------------------------------------------------------
+# ตั้งค่า Encoding ภาษาไทย
 sys.stdout.reconfigure(encoding='utf-8')
+
 # ---------------------------------------------------------
-
-folder_path = "faces"
-known_face_encodings = []
-known_face_names = []
-
-print(f"📂 กำลังอ่านรูปภาพทั้งหมดจากโฟลเดอร์ '{folder_path}' ...")
-
-if not os.path.exists(folder_path):
-    print(f"❌ ไม่พบโฟลเดอร์ {folder_path} กรุณาสร้างโฟลเดอร์และใส่รูปภาพก่อน")
-    os.makedirs(folder_path)
-    exit()
-
-for filename in os.listdir(folder_path):
-    if filename.endswith((".jpg", ".png", ".jpeg")):
-        image_path = os.path.join(folder_path, filename)
-        name = os.path.splitext(filename)[0]
-        
-        try:
-            image = face_recognition.load_image_file(image_path)
-            encoding = face_recognition.face_encodings(image)[0]
-            known_face_encodings.append(encoding)
-            known_face_names.append(name)
-            print(f"✔️  จดจำ: {name}")
-        except IndexError:
-            print(f"⚠️  ข้ามไฟล์: {filename} (หาใบหน้าไม่เจอ)")
-        except Exception as e:
-            print(f"❌ Error: {e}")
-
-print(f"✅ เสร็จสิ้น! จำหน้าได้ทั้งหมด {len(known_face_names)} คน")
-print("---------------------------------------")
-print("📷 กำลังเปิดกล้อง...")
-
-video_capture = cv2.VideoCapture(0)
-
-while True:
-    ret, frame = video_capture.read()
-    if not ret:
-        break
-
-    small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
-    rgb_small_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
-
-    # ค้นหาตำแหน่งและ encoding ของทุกคนในภาพปัจจุบัน
-    face_locations = face_recognition.face_locations(rgb_small_frame)
-    face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
-
-    face_names = []
+# HELPER FUNCTION: แปลงภาพให้เหมาะสมกับ dlib
+# ---------------------------------------------------------
+def to_rgb_image(frame):
+    """
+    แปลง Frame จากกล้อง (BGR/BGRA) หรือไฟล์ (Gray) ให้เป็น RGB 3 Channel มาตรฐาน
+    """
+    if frame is None: return None
     
-    # วนลูปเช็ค "ทุกคน" ที่เจอในกล้องตอนนี้
-    for face_encoding in face_encodings:
-        # 2. ส่วนที่แก้ไข: ใช้ face_distance เพื่อหาคนที่เหมือนที่สุด
-        matches = face_recognition.compare_faces(known_face_encodings, face_encoding)
-        name = "Unknown"
+    # 1. แปลง Data Type
+    if frame.dtype != np.uint8:
+        frame = frame.astype(np.uint8)
 
-        # คำนวณความห่างของใบหน้า (ยิ่งเลขน้อย ยิ่งเหมือนมาก)
-        face_distances = face_recognition.face_distance(known_face_encodings, face_encoding)
-        
-        if len(face_distances) > 0:
-            # หา index ของคนที่ face_distance น้อยที่สุด (เหมือนที่สุด)
-            best_match_index = np.argmin(face_distances)
+    # 2. แปลง Channel
+    if len(frame.shape) == 2:
+        # Grayscale (H, W) -> RGB (H, W, 3)
+        frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
+    elif len(frame.shape) == 3:
+        if frame.shape[2] == 4:
+            # BGRA -> RGB
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB)
+        elif frame.shape[2] == 3:
+            # BGR -> RGB
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             
-            # ถ้าคนที่เหมือนที่สุด อยู่ในเกณฑ์ที่ match กันด้วย
-            if matches[best_match_index]:
-                name = known_face_names[best_match_index]
+    # 3. จัดเรียง Memory
+    if not frame.flags['C_CONTIGUOUS']:
+        frame = np.ascontiguousarray(frame)
+        
+    return frame
 
-        face_names.append(name)
+import pickle
 
-    # วาดกรอบสี่เหลี่ยมให้ทุกคนที่เจอ
-    for (top, right, bottom, left), name in zip(face_locations, face_names):
-        top *= 4
-        right *= 4
-        bottom *= 4
-        left *= 4
+# ---------------------------------------------------------
+# CLASS: ระบบ Logic หลัก
+# ---------------------------------------------------------
+class FaceSystemCore:
+    def __init__(self, log_callback=None):
+        self.script_dir = os.path.dirname(os.path.abspath(__file__))
+        self.faces_dir = os.path.join(self.script_dir, "faces")
+        self.cache_path = os.path.join(self.script_dir, "face_encodings_cache.pkl")
+        self.known_face_encodings = []
+        self.known_face_names = []
+        self.log_callback = log_callback
+        
+        if not os.path.exists(self.faces_dir):
+            os.makedirs(self.faces_dir)
 
-        # ถ้าไม่รู้จักเป็นสีแดง รู้จักเป็นสีเขียว
-        if name == "Unknown":
-            color = (0, 0, 255) 
+    def log(self, message):
+        if self.log_callback:
+            self.log_callback(message)
         else:
-            color = (0, 255, 0)
+            print(message)
 
-        cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
-        cv2.rectangle(frame, (left, bottom - 35), (right, bottom), color, cv2.FILLED)
-        font = cv2.FONT_HERSHEY_DUPLEX
-        cv2.putText(frame, name, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
+    def load_cache(self):
+        if os.path.exists(self.cache_path):
+            try:
+                with open(self.cache_path, 'rb') as f:
+                    return pickle.load(f)
+            except:
+                return {}
+        return {}
 
-    cv2.imshow('Face Recognition Multi-Person', frame)
+    def save_cache(self, cache_data):
+        try:
+            with open(self.cache_path, 'wb') as f:
+                pickle.dump(cache_data, f)
+        except Exception as e:
+            self.log(f"⚠️ บันทึก Cache ไม่สำเร็จ: {e}")
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+    def reload_known_faces(self):
+        """
+        BIG O OPTIMIZATION: 
+        1. ใช้ Caching เพื่อไม่ต้องประมวลผลรูปเดิมซ้ำ (O(New) แทน O(Total))
+        2. ใช้ Mean Encoding เพื่อลด Search Space ใน Loop กล้อง (O(N) แทน O(N*M))
+        """
+        self.log("🔄 กำลังอัปเดตฐานข้อมูล...")
+        cache = self.load_cache()
+        updated_cache = {}
+        
+        people_folders = [f for f in os.listdir(self.faces_dir) if os.path.isdir(os.path.join(self.faces_dir, f))]
+        
+        temp_encodings = []
+        temp_names = []
 
-video_capture.release()
-cv2.destroyAllWindows()
+        for person_name in people_folders:
+            person_folder = os.path.join(self.faces_dir, person_name)
+            images = [f for f in os.listdir(person_folder) if f.lower().endswith((".jpg", ".png", ".jpeg"))]
+            
+            if not images: continue
+
+            # ตรวจสอบว่าคนนี้มีใน Cache และจำนวนรูปเท่าเดิมไหม (เพื่อข้ามการประมวลผล)
+            current_state = (person_name, len(images))
+            if person_name in cache and cache[person_name]['count'] == len(images):
+                avg_encoding = cache[person_name]['encoding']
+                updated_cache[person_name] = cache[person_name]
+                self.log(f"📦 {person_name}: ใช้ข้อมูลจาก Cache")
+            else:
+                # ประมวลผลใหม่เฉพาะคนที่มีการเปลี่ยนแปลง
+                person_encodings = []
+                for filename in images:
+                    image_path = os.path.join(person_folder, filename)
+                    try:
+                        img_bgr = cv2.imread(image_path)
+                        img_rgb = to_rgb_image(img_bgr)
+                        encs = face_recognition.face_encodings(img_rgb)
+                        if len(encs) > 0:
+                            person_encodings.append(encs[0])
+                    except: continue
+                
+                if person_encodings:
+                    # คำนวณ Mean Encoding (Centroid) เพื่อลด Big O ในการเปรียบเทียบ
+                    avg_encoding = np.mean(person_encodings, axis=0)
+                    updated_cache[person_name] = {'encoding': avg_encoding, 'count': len(images)}
+                    self.log(f"⚡ {person_name}: ประมวลผลใหม่ ({len(person_encodings)} ภาพ)")
+                else:
+                    continue
+
+            temp_encodings.append(avg_encoding)
+            temp_names.append(person_name)
+
+        self.known_face_encodings = temp_encodings
+        self.known_face_names = temp_names
+        self.save_cache(updated_cache)
+        self.log(f"📊 ระบบพร้อม: {len(self.known_face_names)} คน (เปรียบเทียบ 1:1 ต่อคน)")
+
+
+    def get_users(self):
+        users = {}
+        if not os.path.exists(self.faces_dir): return users
+        for name in os.listdir(self.faces_dir):
+            path = os.path.join(self.faces_dir, name)
+            if os.path.isdir(path):
+                count = len([f for f in os.listdir(path) if f.endswith(('.jpg', '.png', '.jpeg'))])
+                users[name] = count
+        return users
+
+    def delete_user(self, name):
+        path = os.path.join(self.faces_dir, name)
+        if os.path.exists(path):
+            shutil.rmtree(path)
+            self.log(f"🗑️ ลบ {name}")
+            self.reload_known_faces()
+            return True
+        return False
+
+# ---------------------------------------------------------
+# CLASS: UI
+# ---------------------------------------------------------
+class FaceRecognitionApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("🤖 Face Recognition Pro")
+        self.geometry("600x650")
+        self.configure(bg="#2c3e50")
+        
+        # UI Setup
+        tk.Label(self, text="Face Recognition Dashboard", font=("Helvetica", 24, "bold"), fg="white", bg="#2c3e50").pack(pady=20)
+        self.status_label = tk.Label(self, text="Status: Loading...", font=("TH Sarabun New", 14), fg="#bdc3c7", bg="#2c3e50")
+        self.status_label.pack(pady=5)
+        
+        btn_frame = tk.Frame(self, bg="#2c3e50")
+        btn_frame.pack(pady=20)
+        btn_style = {"font": ("TH Sarabun New", 16, "bold"), "width": 20, "height": 2, "bd": 0, "cursor": "hand2"}
+        
+        self.btn_start = tk.Button(btn_frame, text="📷 เริ่มระบบจดจำ", bg="#27ae60", fg="white", command=self.start_recognition_thread, **btn_style)
+        self.btn_start.pack(pady=5)
+        
+        self.btn_register = tk.Button(btn_frame, text="➕ ลงทะเบียนคนใหม่", bg="#2980b9", fg="white", command=self.open_register_window, **btn_style)
+        self.btn_register.pack(pady=5)
+        
+        self.btn_manage = tk.Button(btn_frame, text="📋 จัดการรายชื่อผู้ใช้", bg="#8e44ad", fg="white", command=self.open_manager, **btn_style)
+        self.btn_manage.pack(pady=5)
+        
+        self.btn_exit = tk.Button(btn_frame, text="🚪 ออกจากโปรแกรม", bg="#c0392b", fg="white", command=self.quit_app, **btn_style)
+        self.btn_exit.pack(pady=5)
+
+        tk.Label(self, text="System Log", font=("Helvetica", 10), fg="#bdc3c7", bg="#2c3e50").pack(anchor="w", padx=20)
+        self.log_area = scrolledtext.ScrolledText(self, height=8, font=("Consolas", 9), bg="#ecf0f1", state="disabled")
+        self.log_area.pack(fill="x", padx=20, pady=5)
+
+        # Core Logic
+        self.core = FaceSystemCore(log_callback=self.update_log)
+        self.core.reload_known_faces()
+        self.refresh_status()
+        self.is_running = False
+
+    def update_log(self, message):
+        def _update():
+            if hasattr(self, 'log_area') and self.log_area.winfo_exists():
+                self.log_area.config(state="normal")
+                self.log_area.insert(tk.END, f"{message}\n")
+                self.log_area.see(tk.END)
+                self.log_area.config(state="disabled")
+        self.after(0, _update)
+
+    def refresh_status(self):
+        def _update():
+            users = self.core.get_users()
+            self.status_label.config(text=f"👥 ผู้ใช้: {len(users)} คน | Encoding: {len(self.core.known_face_names)}")
+        self.after(0, _update)
+
+    def disable_buttons(self):
+        def _update():
+            for btn in [self.btn_start, self.btn_register, self.btn_manage]: btn.config(state="disabled")
+        self.after(0, _update)
+
+    def enable_buttons(self):
+        def _update():
+            for btn in [self.btn_start, self.btn_register, self.btn_manage]: btn.config(state="normal")
+        self.after(0, _update)
+
+    def open_manager(self):
+        ManagerWindow(self, self.core)
+
+    def start_recognition_thread(self):
+        if self.is_running: return
+        self.is_running = True
+        self.disable_buttons()
+        if not self.core.known_face_encodings:
+            self.update_log("⚠️ เริ่มโหมด Unknown")
+        self.update_log("🚀 เริ่มกล้อง... (กด Q เพื่อหยุด)")
+        threading.Thread(target=self.run_recognition, daemon=True).start()
+
+    def run_recognition(self):
+        # เพิ่มหน่วงเวลาเล็กน้อยเผื่อกล้องยังถูกใช้จาก thread อื่น
+        time.sleep(0.5)
+        video_capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        process_this_frame = True
+        face_locations = []
+        face_names = []
+        
+        while self.is_running:
+            ret, frame = video_capture.read()
+            if not ret: break
+
+            try:
+                rgb_frame = to_rgb_image(frame)
+                if rgb_frame is None: continue
+                
+                small_rgb = cv2.resize(rgb_frame, (0, 0), fx=0.25, fy=0.25)
+                small_rgb = np.ascontiguousarray(small_rgb)
+            except Exception:
+                continue
+
+            if process_this_frame:
+                try:
+                    face_locations = face_recognition.face_locations(small_rgb)
+                    face_encodings = face_recognition.face_encodings(small_rgb, face_locations)
+                    
+                    face_names = []
+                    for face_encoding in face_encodings:
+                        name = "Unknown"
+                        # การเรียกใช้งาน list known_face_encodings มีความเสถียรขึ้นเพราะ update แบบ atomic แล้ว
+                        encs = self.core.known_face_encodings
+                        names = self.core.known_face_names
+                        if len(encs) > 0:
+                            distances = face_recognition.face_distance(encs, face_encoding)
+                            if len(distances) > 0:
+                                best_idx = np.argmin(distances)
+                                if distances[best_idx] < 0.6:
+                                    name = names[best_idx]
+                        face_names.append(name)
+                except Exception:
+                    face_locations = []
+                    face_names = []
+
+            process_this_frame = not process_this_frame
+
+            for (top, right, bottom, left), name in zip(face_locations, face_names):
+                top *= 4; right *= 4; bottom *= 4; left *= 4
+                color = (0, 255, 0) if name != "Unknown" else (0, 0, 255)
+                cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
+                cv2.rectangle(frame, (left, bottom - 35), (right, bottom), color, cv2.FILLED)
+                cv2.putText(frame, name, (left + 6, bottom - 6), cv2.FONT_HERSHEY_DUPLEX, 0.8, (255, 255, 255), 1)
+
+            cv2.imshow('Camera (Press Q to Stop)', frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+        video_capture.release()
+        cv2.destroyAllWindows()
+        self.is_running = False
+        self.enable_buttons()
+        self.update_log("🛑 หยุดกล้อง")
+
+    def open_register_window(self):
+        name = simpledialog.askstring("ลงทะเบียน", "ชื่อ-นามสกุล:", parent=self)
+        if not name: return
+        self.disable_buttons()
+        self.update_log(f"📝 เริ่มลงทะเบียน: {name}")
+        threading.Thread(target=self.register_process, args=(name,), daemon=True).start()
+
+    def register_process(self, name):
+        save_path = os.path.join(self.core.faces_dir, name)
+        os.makedirs(save_path, exist_ok=True)
+        
+        video_capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        time.sleep(2.0)
+        
+        if not video_capture.isOpened():
+            self.update_log("❌ เปิดกล้องไม่สำเร็จ")
+            self.enable_buttons()
+            return
+
+        count = 0
+        total = 10
+        btn_coords = [0,0,0,0]
+        self.capture_clicked = False
+
+        def mouse_cb(event, x, y, flags, param):
+            if event == cv2.EVENT_LBUTTONDOWN:
+                if btn_coords[0] <= x <= btn_coords[2] and btn_coords[1] <= y <= btn_coords[3]:
+                    self.capture_clicked = True
+
+        cv2.namedWindow('Register')
+        cv2.setMouseCallback('Register', mouse_cb)
+
+        while True:
+            ret, frame = video_capture.read()
+            if not ret: continue
+            
+            frame = cv2.flip(frame, 1)
+            
+            # Detection (ต้องใช้ RGB สำหรับ Detection)
+            rgb_frame = to_rgb_image(frame)
+            
+            h, w = frame.shape[:2]
+            bx1 = int((w-200)/2); by1 = h-80; bx2 = bx1+200; by2 = by1+60
+            btn_coords = [bx1, by1, bx2, by2]
+            
+            face_detected = False
+            if rgb_frame is not None:
+                try:
+                    if len(face_recognition.face_locations(rgb_frame)) > 0:
+                        face_detected = True
+                except: pass
+            
+            color = (0, 200, 0) if face_detected else (0, 0, 200)
+            cv2.rectangle(frame, (bx1, by1), (bx2, by2), color, -1)
+            cv2.putText(frame, "CAPTURE", (bx1+40, by1+40), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
+            cv2.putText(frame, f"Count: {count}/{total}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,255), 2)
+
+            cv2.imshow('Register', frame)
+            key = cv2.waitKey(1) & 0xFF
+
+            if self.capture_clicked or key == ord(' '):
+                if count < total:
+                    try:
+                        # --- ACTION: บันทึกเป็น 8-bit Grayscale ---
+                        
+                        # 1. แปลงเป็น Gray
+                        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                        
+                        # 2. บันทึกไฟล์ .jpg
+                        file_name = f"{name}_{int(time.time())}.jpg"
+                        file_path = os.path.join(save_path, file_name)
+                        
+                        # cv2.imwrite จัดการ Grayscale ได้ดีเอง
+                        success = cv2.imwrite(file_path, gray_frame)
+                        
+                        if success:
+                            count += 1
+                            self.update_log(f"📸 ถ่ายภาพ {count}/{total} (Grayscale)")
+                            
+                            # Flash Effect
+                            flash = np.full(frame.shape, 255, dtype=np.uint8)
+                            cv2.imshow('Register', flash)
+                            cv2.waitKey(100)
+                        else:
+                            self.update_log(f"❌ บันทึกไฟล์ไม่สำเร็จ (Disk full?)")
+                            
+                    except Exception as e:
+                        self.update_log(f"❌ Error: {e}")
+                        
+                self.capture_clicked = False
+
+            if key == ord('q') or count >= total:
+                break
+
+        video_capture.release()
+        cv2.destroyAllWindows()
+        
+        if count > 0:
+            self.update_log("✅ เสร็จสิ้น กำลังโหลดข้อมูลใหม่...")
+            self.core.reload_known_faces()
+            self.refresh_status()
+        else:
+            self.update_log("⚠️ ยกเลิกการลงทะเบียน")
+        
+        self.enable_buttons()
+
+
+    def quit_app(self):
+        if messagebox.askyesno("ออก", "ปิดโปรแกรม?"): 
+            self.is_running = False
+            self.destroy()
+
+class ManagerWindow(tk.Toplevel):
+    def __init__(self, parent, core):
+        super().__init__(parent)
+        self.core = core
+        self.title("จัดการผู้ใช้")
+        self.geometry("400x500")
+        tk.Label(self, text="รายชื่อ", font=("TH Sarabun New", 16)).pack(pady=10)
+        
+        self.lb = tk.Listbox(self, font=("TH Sarabun New", 14))
+        self.lb.pack(fill="both", expand=True, padx=10)
+        
+        tk.Button(self, text="ลบ", font=("TH Sarabun New", 12), bg="red", fg="white", command=self.delete).pack(pady=5)
+        self.refresh()
+
+    def refresh(self):
+        self.lb.delete(0, tk.END)
+        for n, c in self.core.get_users().items():
+            self.lb.insert(tk.END, f"{n} ({c} ภาพ)")
+        if not self.core.get_users(): self.lb.insert(tk.END, "ไม่มีข้อมูล")
+
+    def delete(self):
+        sel = self.lb.curselection()
+        if not sel: return
+        txt = self.lb.get(sel[0])
+        if "ไม่มี" in txt: return
+        name = txt.split(" (")[0]
+        if messagebox.askyesno("ยืนยัน", f"ลบ {name}?"):
+            self.core.delete_user(name)
+            self.refresh()
+            self.master.refresh_status()
+
+if __name__ == "__main__":
+    app = FaceRecognitionApp()
+    app.mainloop()
