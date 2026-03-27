@@ -160,6 +160,8 @@ class FaceSystemCore:
             return True
         return False
 
+from datetime import datetime
+
 # ---------------------------------------------------------
 # CLASS: UI
 # ---------------------------------------------------------
@@ -289,6 +291,10 @@ class FaceRecognitionApp(tk.Tk):
                 cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
                 cv2.rectangle(frame, (left, bottom - 35), (right, bottom), color, cv2.FILLED)
                 cv2.putText(frame, name, (left + 6, bottom - 6), cv2.FONT_HERSHEY_DUPLEX, 0.8, (255, 255, 255), 1)
+
+            # แสดงวันที่และเวลาบน Frame
+            now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            cv2.putText(frame, now, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2, cv2.LINE_AA)
 
             cv2.imshow('Camera (Press Q to Stop)', frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
