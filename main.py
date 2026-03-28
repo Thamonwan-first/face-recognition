@@ -177,8 +177,8 @@ class FaceRecognitionApp(tk.Tk):
         self.geometry("600x650")
         self.configure(bg="#2c3e50")
         
-        # ระบบป้องกันการเช็คซ้ำ (เก็บชื่อที่เช็คแล้วใน Session นี้)
-        self.recorded_today = set()
+        # ระบบป้องกันการเช็คซ้ำ (เก็บชื่อและเวลาที่เช็คล่าสุดใน Session นี้)
+        self.recorded_today = {}
         
         # UI Setup
         tk.Label(self, text="ระบบเช็คชื่อด้วยใบหน้า", font=("TH Sarabun New", 24, "bold"), fg="white", bg="#2c3e50").pack(pady=20)
@@ -250,13 +250,19 @@ class FaceRecognitionApp(tk.Tk):
 
     def send_attendance(self, raw_name):
         """
-        ส่งข้อมูลไปที่ Google Sheets (ปรับปรุงความแม่นยำและการเช็คพารามิเตอร์)
+        ส่งข้อมูลไปที่ Google Sheets (พร้อมระบบป้องกันการเช็คซ้ำใน 1 ชม.)
         """
-        if raw_name in self.recorded_today or raw_name == "Unknown":
+        if raw_name == "Unknown":
             return
 
-        # บันทึกว่าเช็คแล้วทันที เพื่อป้องกันการส่งซ้ำ
-        self.recorded_today.add(raw_name)
+        # ตรวจสอบเวลาเช็คล่าสุด (1 ชม. = 3600 วินาที)
+        now = time.time()
+        last_time = self.recorded_today.get(raw_name, 0)
+        if now - last_time < 3600:
+            return
+
+        # บันทึกเวลาที่เช็ค (ใส่ไว้ก่อนเริ่ม Task เพื่อกัน Duplicate Request)
+        self.recorded_today[raw_name] = now
 
         def _task():
             # ล้างช่องว่างที่อาจติดมาใน URL
@@ -285,18 +291,18 @@ class FaceRecognitionApp(tk.Tk):
                     self.update_log(f"✅ {msg}")
                 else:
                     self.update_log(f"❌ Google Error: {response.status_code}")
-                    self.recorded_today.discard(raw_name) # หากพลาด ให้ลองใหม่ได้
+                    self.recorded_today.pop(raw_name, None) # หากพลาด ให้ลองใหม่ได้
             except Exception as e:
                 # แสดง Error สั้นๆ เพื่อไม่ให้รก Log
                 err_str = str(e).split(')')[-1] if ')' in str(e) else str(e)
                 self.update_log(f"❌ เชื่อมต่อ Google ไม่ได้: {err_str[:40]}")
-                self.recorded_today.discard(raw_name)
+                self.recorded_today.pop(raw_name, None)
 
         threading.Thread(target=_task, daemon=True).start()
 
     def run_recognition(self):
         time.sleep(0.5)
-        video_capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        video_capture = cv2.VideoCapture(0, cv2.CAP_V4L2)
         process_this_frame = True
         face_locations = []
         face_names = []
@@ -328,7 +334,7 @@ class FaceRecognitionApp(tk.Tk):
                             distances = face_recognition.face_distance(encs, face_encoding)
                             if len(distances) > 0:
                                 best_idx = np.argmin(distances)
-                                if distances[best_idx] < 0.6:
+                                if distances[best_idx] < 0.40:
                                     name = names[best_idx]
                         face_names.append(name)
                         
@@ -349,32 +355,69 @@ class FaceRecognitionApp(tk.Tk):
                 cv2.rectangle(frame, (left, bottom - 35), (right, bottom), color, cv2.FILLED)
                 cv2.putText(frame, name, (left + 6, bottom - 6), cv2.FONT_HERSHEY_DUPLEX, 0.8, (255, 255, 255), 1)
 
-            now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-            cv2.putText(frame, now, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2, cv2.LINE_AA)
+            # --- ส่วนแสดงผลด้านล่าง (Bottom Bar) ---
+            h, w = frame.shape[:2]
+            bar_height = 80
+            # สร้างพื้นที่สีดำด้านล่าง
+            bottom_bar = np.zeros((bar_height, w, 3), dtype=np.uint8)
+            bottom_bar[:] = (44, 62, 80) # สีน้ำเงินเข้ม (Matching UI)
 
-            cv2.imshow('Attendance System (Press Q to Stop)', frame)
+            # ข้อมูล วัน เวลา
+            now = datetime.now()
+            date_str = now.strftime("%d/%m/%Y")
+            time_str = now.strftime("%H:%M:%S")
+            
+            # รายชื่อที่ตรวจพบ
+            detected_names = [n for n in face_names if n != "Unknown"]
+            name_to_show = detected_names[0] if detected_names else "Scanning..."
+            if len(detected_names) > 1:
+                name_to_show = f"{detected_names[0]} (+{len(detected_names)-1})"
+
+            # วาดข้อความลงบน Bottom Bar
+            cv2.putText(bottom_bar, f"DATE: {date_str}", (20, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1, cv2.LINE_AA)
+            cv2.putText(bottom_bar, f"TIME: {time_str}", (20, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1, cv2.LINE_AA)
+            
+            # คำนวณตำแหน่งขวาสุดสำหรับ NAME
+            full_name_text = f"NAME: {name_to_show}"
+            (tw, th), _ = cv2.getTextSize(full_name_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)
+            name_x = w - tw - 20 # ลบความกว้างตัวอักษรและระยะขอบ 20px
+            cv2.putText(bottom_bar, full_name_text, (name_x, 45), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 1, cv2.LINE_AA)
+
+            # รวม Frame กล้องกับ Bottom Bar
+            display_frame = np.vstack((frame, bottom_bar))
+
+            cv2.imshow('Attendance System (Press Q to Stop)', display_frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
         video_capture.release()
         cv2.destroyAllWindows()
+        time.sleep(1)
         self.is_running = False
         self.enable_buttons()
         self.update_log("🛑 หยุดกล้อง")
 
 
     def open_register_window(self):
-        name = simpledialog.askstring("ลงทะเบียน", "ชื่อ-นามสกุล:", parent=self)
+        name = simpledialog.askstring("ลงทะเบียน", "รหัสนักษาศึก-ชื่อ นามสกุล:", parent=self)
         if not name: return
         self.disable_buttons()
         self.update_log(f"📝 เริ่มลงทะเบียน: {name}")
         threading.Thread(target=self.register_process, args=(name,), daemon=True).start()
 
     def register_process(self, name):
+        # --- ตรวจสอบพื้นที่ดิสก์ก่อนเริ่ม ---
+        total, used, free = shutil.disk_usage(self.core.faces_dir)
+        if free < 50 * 1024 * 1024: # ถ้าน้อยกว่า 50MB
+            messagebox.showerror("Error", "พื้นที่ดิสก์ไม่เพียงพอ กรุณาลบไฟล์ที่ไม่จำเป็นออกก่อน")
+            self.update_log("❌ ยกเลิก: พื้นที่ดิสก์เต็ม")
+            self.enable_buttons()
+            return
+
         save_path = os.path.join(self.core.faces_dir, name)
         os.makedirs(save_path, exist_ok=True)
         
-        video_capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        video_capture = cv2.VideoCapture(0, cv2.CAP_V4L2)
         time.sleep(2.0)
         
         if not video_capture.isOpened():
@@ -383,7 +426,7 @@ class FaceRecognitionApp(tk.Tk):
             return
 
         count = 0
-        total = 10
+        total_pics = 10
         btn_coords = [0,0,0,0]
         self.capture_clicked = False
 
@@ -418,16 +461,14 @@ class FaceRecognitionApp(tk.Tk):
             color = (0, 200, 0) if face_detected else (0, 0, 200)
             cv2.rectangle(frame, (bx1, by1), (bx2, by2), color, -1)
             cv2.putText(frame, "CAPTURE", (bx1+40, by1+40), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
-            cv2.putText(frame, f"Count: {count}/{total}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,255), 2)
+            cv2.putText(frame, f"Count: {count}/{total_pics}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,255), 2)
 
             cv2.imshow('Register', frame)
             key = cv2.waitKey(1) & 0xFF
 
             if self.capture_clicked or key == ord(' '):
-                if count < total:
+                if count < total_pics:
                     try:
-                        # --- ACTION: บันทึกเป็น 8-bit Grayscale ---
-                        
                         # 1. แปลงเป็น Gray
                         gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                         
@@ -435,30 +476,36 @@ class FaceRecognitionApp(tk.Tk):
                         file_name = f"{name}_{int(time.time())}.jpg"
                         file_path = os.path.join(save_path, file_name)
                         
-                        # cv2.imwrite จัดการ Grayscale ได้ดีเอง
+                        # ตรวจสอบพื้นที่ก่อนบันทึกแต่ละรูป
+                        _, _, free_now = shutil.disk_usage(self.core.faces_dir)
+                        if free_now < 1 * 1024 * 1024: # ถ้าน้อยกว่า 1MB
+                             raise OSError("Disk Full")
+
                         success = cv2.imwrite(file_path, gray_frame)
                         
                         if success:
                             count += 1
-                            self.update_log(f"📸 ถ่ายภาพ {count}/{total} (Grayscale)")
-                            
-                            # Flash Effect
+                            self.update_log(f"📸 ถ่ายภาพ {count}/{total_pics}")
                             flash = np.full(frame.shape, 255, dtype=np.uint8)
-                            cv2.imshow('Register', flash)
-                            cv2.waitKey(100)
+                            cv2.imshow('Register', flash); cv2.waitKey(100)
                         else:
-                            self.update_log(f"❌ บันทึกไฟล์ไม่สำเร็จ (Disk full?)")
+                            raise Exception("cv2.imwrite failed")
                             
-                    except Exception as e:
-                        self.update_log(f"❌ Error: {e}")
+                    except (OSError, Exception) as e:
+                        msg = "พื้นที่ดิสก์เต็ม" if "Disk" in str(e) else f"Error: {e}"
+                        self.update_log(f"❌ {msg}")
+                        messagebox.showerror("Fatal Error", f"ไม่สามารถบันทึกรูปได้: {msg}")
+                        break # หยุดการลงทะเบียนทันที
                         
                 self.capture_clicked = False
 
-            if key == ord('q') or count >= total:
+            if key == ord('q') or count >= total_pics:
                 break
 
         video_capture.release()
         cv2.destroyAllWindows()
+        time.sleep(1)
+        
         
         if count > 0:
             self.update_log("✅ เสร็จสิ้น กำลังโหลดข้อมูลใหม่...")
