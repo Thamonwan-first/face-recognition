@@ -10,6 +10,7 @@ import time
 from PIL import Image as PILImage
 import shutil
 import threading
+from datetime import datetime
 
 # ตั้งค่า Encoding ภาษาไทย
 sys.stdout.reconfigure(encoding='utf-8')
@@ -160,7 +161,11 @@ class FaceSystemCore:
             return True
         return False
 
-from datetime import datetime
+import requests
+
+# --- ตั้งค่า Google Apps Script Web App URL ---
+# นำ URL ที่ได้จากขั้นตอน Deploy ใน Google Sheets มาวางตรงนี้
+ATTENDANCE_URL = "https://script.google.com/macros/s/AKfycbxmq4TG_A--c0mo7jj0_g96VUxAjOlsXP74SbcsLchJR5UdcJ_DOhzug291n0LVMbM8KA/exec"
 
 # ---------------------------------------------------------
 # CLASS: UI
@@ -168,32 +173,35 @@ from datetime import datetime
 class FaceRecognitionApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("🤖 Face Recognition Pro")
+        self.title("🤖 Face Recognition Attendance System")
         self.geometry("600x650")
         self.configure(bg="#2c3e50")
         
+        # ระบบป้องกันการเช็คซ้ำ (เก็บชื่อที่เช็คแล้วใน Session นี้)
+        self.recorded_today = set()
+        
         # UI Setup
-        tk.Label(self, text="Face Recognition Dashboard", font=("Helvetica", 24, "bold"), fg="white", bg="#2c3e50").pack(pady=20)
+        tk.Label(self, text="ระบบเช็คชื่อด้วยใบหน้า", font=("TH Sarabun New", 24, "bold"), fg="white", bg="#2c3e50").pack(pady=20)
         self.status_label = tk.Label(self, text="Status: Loading...", font=("TH Sarabun New", 14), fg="#bdc3c7", bg="#2c3e50")
         self.status_label.pack(pady=5)
         
         btn_frame = tk.Frame(self, bg="#2c3e50")
         btn_frame.pack(pady=20)
-        btn_style = {"font": ("TH Sarabun New", 16, "bold"), "width": 20, "height": 2, "bd": 0, "cursor": "hand2"}
+        btn_style = {"font": ("TH Sarabun New", 16, "bold"), "width": 25, "height": 2, "bd": 0, "cursor": "hand2"}
         
-        self.btn_start = tk.Button(btn_frame, text="📷 เริ่มระบบจดจำ", bg="#27ae60", fg="white", command=self.start_recognition_thread, **btn_style)
+        self.btn_start = tk.Button(btn_frame, text="📷 เริ่มระบบจดจำ & เช็คชื่อ", bg="#27ae60", fg="white", command=self.start_recognition_thread, **btn_style)
         self.btn_start.pack(pady=5)
         
-        self.btn_register = tk.Button(btn_frame, text="➕ ลงทะเบียนคนใหม่", bg="#2980b9", fg="white", command=self.open_register_window, **btn_style)
+        self.btn_register = tk.Button(btn_frame, text="➕ ลงทะเบียนนักศึกษาใหม่", bg="#2980b9", fg="white", command=self.open_register_window, **btn_style)
         self.btn_register.pack(pady=5)
         
-        self.btn_manage = tk.Button(btn_frame, text="📋 จัดการรายชื่อผู้ใช้", bg="#8e44ad", fg="white", command=self.open_manager, **btn_style)
+        self.btn_manage = tk.Button(btn_frame, text="📋 จัดการรายชื่อนักศึกษา", bg="#8e44ad", fg="white", command=self.open_manager, **btn_style)
         self.btn_manage.pack(pady=5)
         
         self.btn_exit = tk.Button(btn_frame, text="🚪 ออกจากโปรแกรม", bg="#c0392b", fg="white", command=self.quit_app, **btn_style)
         self.btn_exit.pack(pady=5)
 
-        tk.Label(self, text="System Log", font=("Helvetica", 10), fg="#bdc3c7", bg="#2c3e50").pack(anchor="w", padx=20)
+        tk.Label(self, text="บันทึกกิจกรรมระบบ (System Log)", font=("TH Sarabun New", 12), fg="#bdc3c7", bg="#2c3e50").pack(anchor="w", padx=20)
         self.log_area = scrolledtext.ScrolledText(self, height=8, font=("Consolas", 9), bg="#ecf0f1", state="disabled")
         self.log_area.pack(fill="x", padx=20, pady=5)
 
@@ -215,7 +223,7 @@ class FaceRecognitionApp(tk.Tk):
     def refresh_status(self):
         def _update():
             users = self.core.get_users()
-            self.status_label.config(text=f"👥 ผู้ใช้: {len(users)} คน | Encoding: {len(self.core.known_face_names)}")
+            self.status_label.config(text=f"👥 นักศึกษาในระบบ: {len(users)} คน | Encoding: {len(self.core.known_face_names)}")
         self.after(0, _update)
 
     def disable_buttons(self):
@@ -236,12 +244,57 @@ class FaceRecognitionApp(tk.Tk):
         self.is_running = True
         self.disable_buttons()
         if not self.core.known_face_encodings:
-            self.update_log("⚠️ เริ่มโหมด Unknown")
-        self.update_log("🚀 เริ่มกล้อง... (กด Q เพื่อหยุด)")
+            self.update_log("⚠️ เริ่มโหมดบุคคลนิรนาม (ยังไม่มีข้อมูลในระบบ)")
+        self.update_log("🚀 เริ่มกล้องเช็คชื่อ... (กด Q เพื่อหยุด)")
         threading.Thread(target=self.run_recognition, daemon=True).start()
 
+    def send_attendance(self, raw_name):
+        """
+        ส่งข้อมูลไปที่ Google Sheets (ปรับปรุงความแม่นยำและการเช็คพารามิเตอร์)
+        """
+        if raw_name in self.recorded_today or raw_name == "Unknown":
+            return
+
+        # บันทึกว่าเช็คแล้วทันที เพื่อป้องกันการส่งซ้ำ
+        self.recorded_today.add(raw_name)
+
+        def _task():
+            # ล้างช่องว่างที่อาจติดมาใน URL
+            clean_url = ATTENDANCE_URL.strip()
+            
+            # แยก รหัส และ ชื่อ จากชื่อโฟลเดอร์ (รูปแบบ: B6615406-Thh krooo)
+            parts = raw_name.split('-')
+            student_id = parts[0] if len(parts) > 1 else "N/A"
+            full_name = parts[1] if len(parts) > 1 else raw_name
+            
+            # เตรียมพารามิเตอร์ (ต้องเป็นตัวพิมพ์เล็ก id, name, status ตามที่เขียนใน GAS)
+            payload = {
+                "id": str(student_id),
+                "name": str(full_name),
+                "status": "มาเรียน"
+            }
+            
+            try:
+                # ใช้ requests.get เพื่อส่งข้อมูลแบบ URL Parameter
+                # allow_redirects=True สำคัญมากสำหรับ Google Apps Script
+                response = requests.get(clean_url, params=payload, timeout=15, allow_redirects=True)
+                
+                if response.status_code == 200:
+                    # นำข้อความตอบกลับจาก Google มาแสดง (เช่น Success - Data Added...)
+                    msg = response.text.strip()
+                    self.update_log(f"✅ {msg}")
+                else:
+                    self.update_log(f"❌ Google Error: {response.status_code}")
+                    self.recorded_today.discard(raw_name) # หากพลาด ให้ลองใหม่ได้
+            except Exception as e:
+                # แสดง Error สั้นๆ เพื่อไม่ให้รก Log
+                err_str = str(e).split(')')[-1] if ')' in str(e) else str(e)
+                self.update_log(f"❌ เชื่อมต่อ Google ไม่ได้: {err_str[:40]}")
+                self.recorded_today.discard(raw_name)
+
+        threading.Thread(target=_task, daemon=True).start()
+
     def run_recognition(self):
-        # เพิ่มหน่วงเวลาเล็กน้อยเผื่อกล้องยังถูกใช้จาก thread อื่น
         time.sleep(0.5)
         video_capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         process_this_frame = True
@@ -269,7 +322,6 @@ class FaceRecognitionApp(tk.Tk):
                     face_names = []
                     for face_encoding in face_encodings:
                         name = "Unknown"
-                        # การเรียกใช้งาน list known_face_encodings มีความเสถียรขึ้นเพราะ update แบบ atomic แล้ว
                         encs = self.core.known_face_encodings
                         names = self.core.known_face_names
                         if len(encs) > 0:
@@ -279,6 +331,11 @@ class FaceRecognitionApp(tk.Tk):
                                 if distances[best_idx] < 0.6:
                                     name = names[best_idx]
                         face_names.append(name)
+                        
+                        # --- ระบบเช็คชื่อ ---
+                        if name != "Unknown":
+                            self.send_attendance(name)
+                            
                 except Exception:
                     face_locations = []
                     face_names = []
@@ -292,11 +349,10 @@ class FaceRecognitionApp(tk.Tk):
                 cv2.rectangle(frame, (left, bottom - 35), (right, bottom), color, cv2.FILLED)
                 cv2.putText(frame, name, (left + 6, bottom - 6), cv2.FONT_HERSHEY_DUPLEX, 0.8, (255, 255, 255), 1)
 
-            # แสดงวันที่และเวลาบน Frame
             now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
             cv2.putText(frame, now, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2, cv2.LINE_AA)
 
-            cv2.imshow('Camera (Press Q to Stop)', frame)
+            cv2.imshow('Attendance System (Press Q to Stop)', frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
@@ -305,6 +361,7 @@ class FaceRecognitionApp(tk.Tk):
         self.is_running = False
         self.enable_buttons()
         self.update_log("🛑 หยุดกล้อง")
+
 
     def open_register_window(self):
         name = simpledialog.askstring("ลงทะเบียน", "ชื่อ-นามสกุล:", parent=self)
