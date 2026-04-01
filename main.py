@@ -84,7 +84,12 @@ class Pi5PortraitDash(tk.Tk):
     def __init__(self): 
         super().__init__() 
         self.title("PI 5 PORTRAIT DASHBOARD") 
-        self.geometry("600x1024") 
+        
+        # ตั้งค่าให้เปิดเต็มหน้าจอ (Fullscreen)
+        self.attributes('-fullscreen', True)
+        # กดปุ่ม Esc เพื่อออกจากโหมดเต็มจอ
+        self.bind("<Escape>", lambda event: self.attributes("-fullscreen", False))
+        
         self.configure(bg="#050505") 
 
         self.frame_q = mp.Queue(maxsize=2) 
@@ -161,10 +166,6 @@ class Pi5PortraitDash(tk.Tk):
                                 command=self.capture_photo, bd=0, height=2) 
         self.btn_capture.pack(fill=tk.X, pady=2) 
 
-        self.btn_train = tk.Button(right_ctrl, text="🔄 RELOAD AI", bg="#8e44ad", fg="white", font=("Arial", 9, "bold"), 
-                                command=self.manual_train, bd=0) 
-        self.btn_train.pack(fill=tk.X, pady=2)
-
     def rotate(self): 
         new_rot = (self.rotation_val.value + 90) % 360
         self.rotation_val.value = new_rot
@@ -174,7 +175,6 @@ class Pi5PortraitDash(tk.Tk):
         if self.is_training: return
         self.is_training = True
         self.add_log("AI: Training/Updating Database...")
-        self.btn_train.config(state=tk.DISABLED, text="⏳ TRAINING...")
         
         cache = {}
         if os.path.exists(self.cache_path):
@@ -204,7 +204,6 @@ class Pi5PortraitDash(tk.Tk):
         
         self.add_log("AI: Update Success! System is ready.")
         self.is_training = False
-        self.btn_train.config(state=tk.NORMAL, text="🔄 RELOAD AI")
         
         # ถ้ากล้องรันอยู่ ให้แจ้งเตือน AI ให้รีโหลด cache ทันที
         if self.ctrl_ev.is_set():
