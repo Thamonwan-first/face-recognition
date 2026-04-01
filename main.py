@@ -18,26 +18,33 @@ ATTENDANCE_URL = "https://script.google.com/macros/s/AKfycbxmq4TG_A--c0mo7jj0_g9
 # --------------------------------------------------------- 
 # FUNCTION: AI CORE PROCESS
 # --------------------------------------------------------- 
-def ai_worker(frame_q, result_q, ctrl_ev, faces_dir, cache_path, rotation_val): 
-    known_encs = [] 
-    known_names = [] 
-
-    if os.path.exists(cache_path): 
+def load_encodings(cache_path):
+    known_encs = []
+    known_names = []
+    if os.path.exists(cache_path):
         try:
-            with open(cache_path, 'rb') as f: 
-                cache = pickle.load(f) 
-                for name, data in cache.items(): 
-                    known_encs.append(data['encoding']) 
-                    known_names.append(name) 
+            with open(cache_path, 'rb') as f:
+                cache = pickle.load(f)
+                for name, data in cache.items():
+                    known_encs.append(data['encoding'])
+                    known_names.append(name)
         except: pass
+    return np.array(known_encs), known_names
+
+def ai_worker(frame_q, result_q, ctrl_ev, reload_ev, faces_dir, cache_path, rotation_val): 
+    known_encs, known_names = load_encodings(cache_path)
      
-    known_encs = np.array(known_encs) 
     cap = cv2.VideoCapture(0) 
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640) 
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480) 
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
     while ctrl_ev.is_set(): 
+        # เช็คสัญญาณรีโหลดข้อมูลใบหน้าใหม่
+        if reload_ev.is_set():
+            known_encs, known_names = load_encodings(cache_path)
+            reload_ev.clear()
+
         ret, frame = cap.read() 
         if not ret: continue 
 
@@ -77,14 +84,14 @@ class Pi5PortraitDash(tk.Tk):
     def __init__(self): 
         super().__init__() 
         self.title("PI 5 PORTRAIT DASHBOARD") 
-        # ตั้งขนาดให้เหมาะกับจอแนวตั้ง (เช่น 600x1024)
         self.geometry("600x1024") 
         self.configure(bg="#050505") 
 
         self.frame_q = mp.Queue(maxsize=2) 
         self.result_q = mp.Queue(maxsize=2) 
         self.ctrl_ev = mp.Event() 
-        self.rotation_val = mp.Value('i', 90) # เริ่มต้นที่ 90 องศาสำหรับจอแนวตั้ง
+        self.reload_ev = mp.Event() # สำหรับแจ้ง AI ให้โหลดไฟล์ cache ใหม่
+        self.rotation_val = mp.Value('i', 0) 
         self.proc = None 
          
         self.last_locs = [] 
@@ -92,6 +99,7 @@ class Pi5PortraitDash(tk.Tk):
         self.recorded = {} 
         self.current_frame = None 
         self.capture_count = 0
+        self.is_training = False # สถานะว่ากำลังประมวลผลอยู่หรือไม่
 
         self.init_core_paths() 
         self.init_ui() 
@@ -106,10 +114,10 @@ class Pi5PortraitDash(tk.Tk):
         if not os.path.exists(self.faces_dir): os.makedirs(self.faces_dir) 
 
     def init_ui(self): 
-        # จัด Grid แบบแถวเดียว (แนวตั้ง)
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=3) # ส่วนกล้อง (ใหญ่)
-        self.rowconfigure(1, weight=1) # ส่วนควบคุม (เล็กกว่า)
+        self.rowconfigure(0, weight=3) # ส่วนกล้อง
+        self.rowconfigure(1, weight=1) # ส่วน Log (ย้ายมาไว้ใต้กล้อง)
+        self.rowconfigure(2, weight=1) # ส่วนควบคุม
 
         # 1. Video Frame (Top)
         self.v_frame = tk.Frame(self, bg="#000") 
@@ -117,11 +125,14 @@ class Pi5PortraitDash(tk.Tk):
         self.v_label = tk.Label(self.v_frame, bg="#000") 
         self.v_label.pack(fill=tk.BOTH, expand=True) 
 
-        # 2. Control Panel (Bottom)
-        self.p_frame = tk.Frame(self, bg="#111") 
-        self.p_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        # 2. Log Area (Middle - Under Camera)
+        self.log = scrolledtext.ScrolledText(self, bg="#050505", fg="#00ff00", font=("Monospace", 9), bd=0, height=6) 
+        self.log.grid(row=1, column=0, sticky="nsew", padx=15, pady=5)
 
-        # แบ่งส่วนภายใน Panel เป็น 2 คอลัมน์ (ซ้าย: ปุ่มระบบ, ขวา: ลงทะเบียน)
+        # 3. Control Panel (Bottom)
+        self.p_frame = tk.Frame(self, bg="#111") 
+        self.p_frame.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 10))
+
         self.p_frame.columnconfigure(0, weight=1)
         self.p_frame.columnconfigure(1, weight=1)
 
@@ -134,8 +145,6 @@ class Pi5PortraitDash(tk.Tk):
                                 command=self.toggle_engine, bd=0, height=2) 
         self.btn_run.pack(fill=tk.X, pady=2) 
 
-        self.lbl_rot = tk.Label(left_ctrl, text="Rotate: 90°", fg="#ffcc00", bg="#111", font=("Arial", 9))
-        self.lbl_rot.pack()
         tk.Button(left_ctrl, text="ROTATE SCREEN", bg="#332200", fg="#ffcc00", command=self.rotate, bd=0).pack(fill=tk.X, pady=2)
 
         # --- ส่วนขวา: ลงทะเบียน ---
@@ -143,6 +152,8 @@ class Pi5PortraitDash(tk.Tk):
         right_ctrl.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
 
         tk.Label(right_ctrl, text="REGISTRATION", font=("Verdana", 10, "bold"), fg="#ffcc00", bg="#111").pack(pady=5)
+        # เพิ่มข้อความตัวอย่างไว้บนช่องกรอก
+        tk.Label(right_ctrl, text="ตัวอย่าง: รหัสนักศึกษา-ชื่อสกุล", font=("Arial", 8), fg="#888", bg="#111").pack()
         self.ent_name = tk.Entry(right_ctrl, bg="#222", fg="white", bd=0, font=("Arial", 11))
         self.ent_name.pack(fill=tk.X, pady=2)
 
@@ -154,23 +165,23 @@ class Pi5PortraitDash(tk.Tk):
                                 command=self.manual_train, bd=0) 
         self.btn_train.pack(fill=tk.X, pady=2)
 
-        # 3. Log Area (Full Width at the very bottom)
-        self.log = scrolledtext.ScrolledText(self.p_frame, bg="#050505", fg="#666", font=("Monospace", 8), bd=0, height=4) 
-        self.log.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=5, pady=5)
-
     def rotate(self): 
         new_rot = (self.rotation_val.value + 90) % 360
         self.rotation_val.value = new_rot
-        self.lbl_rot.config(text=f"Rotate: {new_rot}°")
         self.add_log(f"Camera rotated to {new_rot}°")
 
     def train_ai(self):
-        self.add_log("AI: Training...")
+        if self.is_training: return
+        self.is_training = True
+        self.add_log("AI: Training/Updating Database...")
+        self.btn_train.config(state=tk.DISABLED, text="⏳ TRAINING...")
+        
         cache = {}
         if os.path.exists(self.cache_path):
             try:
                 with open(self.cache_path, 'rb') as f: cache = pickle.load(f)
             except: pass
+        
         updated_cache = {}
         people = [f for f in os.listdir(self.faces_dir) if os.path.isdir(os.path.join(self.faces_dir, f))]
         for name in people:
@@ -188,18 +199,26 @@ class Pi5PortraitDash(tk.Tk):
                         if e: encs.append(e[0])
                     except: continue
                 if encs: updated_cache[name] = {'encoding': np.mean(encs, axis=0), 'count': len(imgs)}
+        
         with open(self.cache_path, 'wb') as f: pickle.dump(updated_cache, f)
-        self.add_log("AI: Ready")
-        self.after(0, self.toggle_engine)
+        
+        self.add_log("AI: Update Success! System is ready.")
+        self.is_training = False
+        self.btn_train.config(state=tk.NORMAL, text="🔄 RELOAD AI")
+        
+        # ถ้ากล้องรันอยู่ ให้แจ้งเตือน AI ให้รีโหลด cache ทันที
+        if self.ctrl_ev.is_set():
+            self.reload_ev.set()
+        else:
+            self.after(0, self.toggle_engine)
 
     def manual_train(self):
-        if self.ctrl_ev.is_set(): self.toggle_engine()
         threading.Thread(target=self.train_ai, daemon=True).start()
 
     def toggle_engine(self): 
         if not self.ctrl_ev.is_set(): 
             self.ctrl_ev.set() 
-            self.proc = mp.Process(target=ai_worker, args=(self.frame_q, self.result_q, self.ctrl_ev, self.faces_dir, self.cache_path, self.rotation_val)) 
+            self.proc = mp.Process(target=ai_worker, args=(self.frame_q, self.result_q, self.ctrl_ev, self.reload_ev, self.faces_dir, self.cache_path, self.rotation_val)) 
             self.proc.start() 
             self.btn_run.config(text="STOP SYSTEM", bg="#441111", fg="#ff5555") 
         else: 
@@ -217,9 +236,11 @@ class Pi5PortraitDash(tk.Tk):
         self.capture_count += 1
         self.btn_capture.config(text=f"📸 CAPTURE ({self.capture_count}/10)")
         if self.capture_count >= 10:
-            messagebox.showinfo("Done", "ลงทะเบียนครบ 10 รูปแล้ว")
+            messagebox.showinfo("Done", f"ลงทะเบียนคุณ {name} เรียบร้อยแล้ว\nระบบจะทำการอัปเดตข้อมูลอัตโนมัติ")
             self.ent_name.delete(0, tk.END); self.capture_count = 0
             self.btn_capture.config(text="📸 CAPTURE (0/10)")
+            # รันระบบ Hot-Reload อัตโนมัติทันที
+            self.manual_train()
 
     def add_log(self, m): 
         self.log.insert(tk.END, f"{datetime.now().strftime('%H:%M:%S')}> {m}\n") 
@@ -245,8 +266,9 @@ class Pi5PortraitDash(tk.Tk):
                 if not is_reg:
                     for (t, r, b, l), name in zip(self.last_locs, self.last_names): 
                         t, r, b, l = t*5, r*5, b*5, l*5 
-                        cv2.rectangle(frame, (l, t), (r, b), (0, 255, 0), 2) 
-                        cv2.putText(frame, name, (l, t-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1) 
+                        color = (0, 0, 255) if name == "Unknown" else (0, 255, 0) # แดงถ้าไม่รู้จัก, เขียวถ้ารู้จัก
+                        cv2.rectangle(frame, (l, t), (r, b), color, 2) 
+                        cv2.putText(frame, name, (l, t-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1) 
                 else:
                     cv2.putText(frame, "REGISTRATION MODE", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 204, 255), 2)
 
@@ -270,5 +292,6 @@ class Pi5PortraitDash(tk.Tk):
 
 if __name__ == "__main__": 
     mp.set_start_method('spawn', force=True) 
-    app = Pi5PortraitDash(); app.mainloop() 
+    app = Pi5PortraitDash()
+    app.mainloop()
 
