@@ -248,12 +248,15 @@ class Pi5PortraitDash(tk.Tk):
     def main_loop(self): 
         is_reg = len(self.ent_name.get().strip()) > 0
         try: 
-            while not self.result_q.empty(): 
+            if not self.result_q.empty():
                 locs, names = self.result_q.get_nowait()
                 if not is_reg:
                     self.last_locs, self.last_names = locs, names
                     for n in self.last_names: 
-                        if n != "Unknown": self.cloud_sync(n) 
+                        if n != "Unknown": 
+                            if time.time() - self.recorded.get(n, 0) > 5:
+                                self.add_log(f"✅ Detected: {n}")
+                            self.cloud_sync(n) 
                 else: self.last_locs, self.last_names = [], []
         except: pass 
 
@@ -272,25 +275,41 @@ class Pi5PortraitDash(tk.Tk):
                     cv2.putText(frame, "REGISTRATION MODE", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 204, 255), 2)
 
                 img = PILImage.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)) 
-                w, h = self.v_label.winfo_width(), self.v_label.winfo_height() 
+                w, h = 700, 1022
+                #w, h = self.v_label.winfo_width(), self.v_label.winfo_height()
+                #print("w : ",w)
+                #print("h : ",h) 
                 if w > 10: img = img.resize((w, h), PILImage.Resampling.NEAREST) 
                 tk_img = ImageTk.PhotoImage(image=img) 
                 self.v_label.imgtk = tk_img; self.v_label.config(image=tk_img) 
         except: pass 
         self.after(16, self.main_loop) 
 
-    def cloud_sync(self, name): 
-        if time.time() - self.recorded.get(name, 0) < 300: return 
-        self.recorded[name] = time.time() 
-        def _task(): 
-            try: 
-                p = name.split('-') 
-                if len(p) >= 2: requests.get(ATTENDANCE_URL, params={"id":p[0],"name":p[1],"status":"มาเรียน"}, timeout=5) 
-            except: self.recorded.pop(name, None) 
-        threading.Thread(target=_task, daemon=True).start() 
+    def cloud_sync(self, name):
+        # ตรวจสอบเวลาปัจจุบันและเวลาที่เก็บไว้ใน self.recorded
+        current_time = time.time()
+        last_sent_time = self.recorded.get(name, 0)
+        
+        self.add_log(f"Checking {name}")
+
+        if current_time - last_sent_time < 3600:
+            self.add_log(f"Skipping {name}, sent within the last hour.")
+            return
+        
+        self.recorded[name] = current_time
+        self.add_log(f"Sending {name} to Google Sheets.")
+        
+        def _task():
+            try:
+                p = name.split('-')
+                if len(p) >= 2:
+                    requests.get(ATTENDANCE_URL, params={"id": p[0], "name": p[1], "status": "มาเรียน"}, timeout=5)
+            except:
+                self.recorded.pop(name, None)
+        
+        threading.Thread(target=_task, daemon=True).start()
 
 if __name__ == "__main__": 
     mp.set_start_method('spawn', force=True) 
     app = Pi5PortraitDash()
     app.mainloop()
-
