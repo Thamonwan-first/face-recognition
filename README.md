@@ -69,3 +69,8 @@
 * **การดาวน์โหลดไฟล์สำรอง:** สามารถไปที่หน้าเว็บแอปแท็บ **"สำรองระบบ (Backup/Restore)"** แล้วกดปุ่มดาวน์โหลดไฟล์ข้อมูล `.json` เพื่อนำไปบันทึกเก็บไว้ได้โดยตรง
 
 *(สำหรับคำแนะนำในการรันและตั้งค่าแบบอัตโนมัติบนบอร์ด **Raspberry Pi 5** สามารถดูคู่มือได้ที่ไฟล์: [.agents/skills/face_recognition_pi5/SKILL.md](file:///D:/face_recognition/.agents/skills/face_recognition_pi5/SKILL.md))*
+
+
+
+pkill -f server.js
+node server.js
