@@ -90,7 +90,6 @@ class Pi5PortraitDash(tk.Tk):
         # กดปุ่ม Esc เพื่อออกจากโหมดเต็มจอ
         self.bind("<Escape>", lambda event: self.attributes("-fullscreen", False))
         
-
         self.configure(bg="#050505") 
 
         self.frame_q = mp.Queue(maxsize=2) 
@@ -176,7 +175,6 @@ class Pi5PortraitDash(tk.Tk):
         if self.is_training: return
         self.is_training = True
         self.add_log("AI: Training/Updating Database...")
-
         
         cache = {}
         if os.path.exists(self.cache_path):
@@ -206,7 +204,6 @@ class Pi5PortraitDash(tk.Tk):
         
         self.add_log("AI: Update Success! System is ready.")
         self.is_training = False
-
         
         # ถ้ากล้องรันอยู่ ให้แจ้งเตือน AI ให้รีโหลด cache ทันที
         if self.ctrl_ev.is_set():
@@ -260,7 +257,6 @@ class Pi5PortraitDash(tk.Tk):
                             if time.time() - self.recorded.get(n, 0) > 5:
                                 self.add_log(f"✅ Detected: {n}")
                             self.cloud_sync(n) 
-
                 else: self.last_locs, self.last_names = [], []
         except: pass 
 
@@ -288,7 +284,6 @@ class Pi5PortraitDash(tk.Tk):
                 self.v_label.imgtk = tk_img; self.v_label.config(image=tk_img) 
         except: pass 
         self.after(16, self.main_loop) 
-
 
     def cloud_sync(self, name):
         # ตรวจสอบเวลาปัจจุบันและเวลาที่เก็บไว้ใน self.recorded
