@@ -215,6 +215,7 @@ app.get('/api/alerts', (req, res) => {
 // Get current system data
 app.get('/api/db', (req, res) => {
   autoDeactivateExpiredSessions();
+  syncFacesFolderToDb();
   res.json({
     ...db,
     serverIp: getLocalIpAddress()
