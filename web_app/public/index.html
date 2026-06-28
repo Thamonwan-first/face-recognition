@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบเช็คชื่อด้วยใบหน้า - Face Recognition Dashboard</title>
+  <!-- Google Fonts: Inter & Sarabun -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <!-- Style Sheet -->
+  <link rel="stylesheet" href="style.css">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+  <div class="glow-bg"></div>
+  
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="logo-area" style="justify-content: center; text-align: center; padding-bottom: 20px;">
+        <h2 style="font-size: 18px; font-weight: 700; color: var(--text-primary); letter-spacing: 0.5px;">ระบบเช็คชื่อเข้าเรียน</h2>
+        <button class="sidebar-close-btn" onclick="toggleSidebar()" style="display: none; background: transparent; border: none; font-size: 20px; color: var(--text-secondary); cursor: pointer;"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <nav class="nav-menu">
+        <button class="nav-btn active" id="tab-dash" onclick="switchTab('dashboard')">
+          <i class="fa-solid fa-chart-line"></i> แดชบอร์ดสด (Live Feed)
+        </button>
+        <button class="nav-btn" id="tab-session" onclick="switchTab('sessions')">
+          <i class="fa-solid fa-clock-rotate-left"></i> กำหนดเวลาเช็คชื่อ (Sessions)
+        </button>
+        <button class="nav-btn" id="tab-report" onclick="switchTab('report')">
+          <i class="fa-solid fa-file-invoice"></i> รายงานเช็คชื่อ (Reports)
+        </button>
+        <button class="nav-btn" id="tab-reg" onclick="switchTab('register')">
+          <i class="fa-solid fa-user-plus"></i> ลงทะเบียนนักศึกษา (Register)
+        </button>
+        <button class="nav-btn" id="tab-backup" onclick="switchTab('backup')">
+          <i class="fa-solid fa-database"></i> สำรองระบบ (Backup/Restore)
+        </button>
+      </nav>
+      <div class="system-status-box">
+        <div class="status-indicator">
+          <span class="pulse-dot green" id="status-pulse"></span>
+          <span id="status-text">ระบบกำลังทำงาน</span>
+        </div>
+        <p class="status-subtext">Web App Port: 5000</p>
+        <button class="btn-logout-small" onclick="handleLogout()"><i class="fa-solid fa-right-from-bracket"></i> ออกจากระบบ</button>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Top header banner -->
+      <header class="top-header">
+        <div style="display: flex; align-items: center; gap: 15px;">
+          <button class="menu-toggle-btn" onclick="toggleSidebar()" style="display: none;"><i class="fa-solid fa-bars"></i></button>
+          <div class="header-title">
+            <h1 id="page-title">แดชบอร์ดสด (Live Feed)</h1>
+            <p class="subtitle" id="page-subtitle">แสดงข้อมูลการเช็คชื่อแบบเรียลไทม์ผ่านกล้อง</p>
+          </div>
+        </div>
+        <div class="current-session-banner" id="active-session-banner">
+          <i class="fa-regular fa-bell pulse-bell"></i>
+          <span>ไม่มีคาบเรียนที่กำลังเปิดเช็คชื่อ</span>
+        </div>
+      </header>
+
+      <!-- TAB content 1: DASHBOARD -->
+      <section id="sect-dashboard" class="tab-content active">
+        <!-- Stats Row -->
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-icon bg-blue"><i class="fa-solid fa-users"></i></div>
+            <div class="stat-info">
+              <h3>นักศึกษาในระบบทั้งหมด</h3>
+              <p class="stat-value" id="stat-registered-count">0</p>
+              <span>คน</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon bg-green"><i class="fa-solid fa-user-check"></i></div>
+            <div class="stat-info">
+              <h3>เข้าเรียนแล้ว (วันนี้)</h3>
+              <p class="stat-value text-green" id="stat-present-count">0</p>
+              <span>คน</span>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon bg-purple"><i class="fa-solid fa-calendar-day"></i></div>
+            <div class="stat-info">
+              <h3>เซสชันเช็คชื่อวันนี้</h3>
+              <p class="stat-value" id="stat-session-count">0</p>
+              <span>เซสชัน</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="dash-grid">
+          <!-- Live Alerts Panel -->
+          <div class="card live-alerts-card">
+            <div class="card-header">
+              <h2><i class="fa-solid fa-wave-square text-green"></i> การแจ้งเตือนเช็คชื่อเรียลไทม์</h2>
+              <span class="badge badge-green">Real-time</span>
+            </div>
+            <div class="card-body">
+              <div id="live-alert-container" class="live-alerts-list">
+                <div class="no-alerts-msg">
+                  <i class="fa-solid fa-qrcode-viewfinder spinner-slow"></i>
+                  <p>รอการตรวจจับใบหน้าจากกล้อง...</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Check-ins List -->
+          <div class="card recent-checkins-card">
+            <div class="card-header">
+              <h2><i class="fa-regular fa-calendar-check"></i> รายชื่อเช็คชื่อคาบล่าสุด</h2>
+              <button class="btn btn-secondary-outline btn-sm" onclick="fetchDatabase()"><i class="fa-solid fa-arrows-rotate"></i> โหลดข้อมูลใหม่</button>
+            </div>
+            <div class="card-body">
+              <div class="table-container">
+                <table class="styled-table">
+                  <thead>
+                    <tr>
+                      <th>รหัสนักศึกษา</th>
+                      <th>ชื่อ-นามสกุล</th>
+                      <th>คาบเรียน</th>
+                      <th>เวลาที่เช็คชื่อ</th>
+                      <th>สถานะ</th>
+                      <th>โหมด</th>
+                    </tr>
+                  </thead>
+                  <tbody id="attendance-table-body">
+                    <tr>
+                      <td colspan="6" class="text-center text-muted">ไม่มีรายการเช็คชื่อล่าสุด</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB content 2: SESSIONS (SCHEDULE) -->
+      <section id="sect-sessions" class="tab-content">
+        <div class="dash-grid-2-1">
+          <!-- Add/Edit Session Form -->
+          <div class="card">
+            <div class="card-header">
+              <h2><i class="fa-regular fa-clock"></i> ตั้งค่าช่วงเวลาเช็คชื่อใหม่</h2>
+            </div>
+            <div class="card-body">
+              <form id="session-form" onsubmit="createSession(event)" class="styled-form">
+                <div class="form-group">
+                  <label for="sess-subjectCode"><i class="fa-solid fa-barcode"></i> รหัสวิชา</label>
+                  <input type="text" id="sess-subjectCode" placeholder="เช่น CS-101" required>
+                </div>
+                <div class="form-group">
+                  <label for="sess-subjectName"><i class="fa-solid fa-book-bookmark"></i> ชื่อวิชา</label>
+                  <input type="text" id="sess-subjectName" placeholder="เช่น Computer Science I" required>
+                </div>
+                <div class="form-group">
+                  <label for="sess-location"><i class="fa-solid fa-location-dot"></i> สถานที่เรียน</label>
+                  <input type="text" id="sess-location" placeholder="เช่น ห้อง 401 หรือ Online" required>
+                </div>
+                <div class="form-group">
+                  <label for="sess-instructorName"><i class="fa-solid fa-user-tie"></i> ชื่อผู้สอน</label>
+                  <input type="text" id="sess-instructorName" placeholder="เช่น ดร.สมชาย ใจดี" required>
+                </div>
+                <div class="form-row">
+                  <div class="form-group col">
+                    <label for="sess-date"><i class="fa-regular fa-calendar"></i> วันที่เรียน</label>
+                    <input type="date" id="sess-date" required>
+                  </div>
+                  <div class="form-group col">
+                    <label for="sess-lateAfter"><i class="fa-regular fa-clock"></i> เริ่มสายหลังเวลา</label>
+                    <input type="time" id="sess-lateAfter" placeholder="เช่น 09:15">
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group col">
+                    <label for="sess-start"><i class="fa-regular fa-clock"></i> เวลาเริ่มต้น</label>
+                    <input type="time" id="sess-start" required>
+                  </div>
+                  <div class="form-group col">
+                    <label for="sess-end"><i class="fa-regular fa-clock"></i> เวลาสิ้นสุด</label>
+                    <input type="time" id="sess-end" required>
+                  </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block"><i class="fa-solid fa-calendar-plus"></i> บันทึกและเปิดเซสชันนี้</button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Session List -->
+          <div class="card">
+            <div class="card-header">
+              <h2><i class="fa-solid fa-list-check"></i> รายการช่วงเวลาทั้งหมด</h2>
+            </div>
+            <div class="card-body">
+              <div class="session-list" id="sessions-container">
+                <!-- Session items will populate here -->
+                <p class="text-center text-muted">ไม่พบประวัติเซสชันเช็คชื่อ</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB content 3: REGISTER STUDENT -->
+      <section id="sect-register" class="tab-content">
+        <div class="dash-grid-2-1">
+          <!-- Registration form -->
+          <div class="card">
+            <div class="card-header">
+              <h2><i class="fa-solid fa-user-plus"></i> ลงทะเบียนใบหน้าและรหัสนักศึกษา</h2>
+            </div>
+            <div class="card-body">
+              <div id="reload-alert-box" class="info-alert hide">
+                <i class="fa-solid fa-circle-notch spinner"></i>
+                <div class="alert-content">
+                  <h4>ระบบหลักกำลังอัปเดตโมเดลใบหน้า...</h4>
+                  <p>หลังจากบันทึกแล้ว ระบบจะรีโหลด encodings ใบหน้าของ Python GUI ให้อัตโนมัติ</p>
+                </div>
+              </div>
+              
+              <form id="register-form" onsubmit="registerStudent(event)" class="styled-form">
+                <div class="form-group">
+                  <label for="reg-studentId"><i class="fa-regular fa-id-card"></i> รหัสนักศึกษา</label>
+                  <input type="text" id="reg-studentId" placeholder="เช่น B6615406" required>
+                </div>
+                <div class="form-group">
+                  <label for="reg-name"><i class="fa-regular fa-user"></i> ชื่อ-นามสกุล (อังกฤษ หรือ ไทย)</label>
+                  <input type="text" id="reg-name" placeholder="เช่น thamonawan Kroenkratok" required>
+                </div>
+                <div class="form-group">
+                  <label><i class="fa-regular fa-image"></i> อัปโหลดรูปภาพใบหน้าของนักศึกษา (อัปโหลดได้หลายรูปพร้อมกัน)</label>
+                  <div class="file-drop-area" id="file-drop-area">
+                    <i class="fa-regular fa-images upload-icon"></i>
+                    <span class="file-msg">ลากรูปภาพใบหน้ามาวางที่นี่ หรือ คลิกเพื่อเลือกรูปภาพ (เลือกได้หลายรูป)</span>
+                    <input class="file-input" type="file" id="reg-photo" accept="image/*" onchange="previewFiles()" multiple required>
+                  </div>
+                  <div id="image-preview-container" class="image-preview-container hide" style="padding: 15px; background: rgba(0, 0, 0, 0.02); height: auto; max-height: none;">
+                    <div id="image-preview-gallery" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 10px; margin-bottom: 10px;"></div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--glass-border); padding-top: 10px; font-size: 13px; color: var(--text-secondary);">
+                      <span id="preview-count-label">เลือกแล้ว 0 รูป</span>
+                      <button type="button" class="btn btn-secondary-outline btn-xs" onclick="removeImage()" style="margin: 0; padding: 4px 10px;"><i class="fa-solid fa-circle-xmark"></i> ล้างรูปทั้งหมด</button>
+                    </div>
+                  </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block" id="btn-submit-register">
+                  <i class="fa-solid fa-cloud-arrow-up"></i> บันทึกข้อมูลและประมวลผลใบหน้า
+                </button>
+                <div style="text-align: center; margin: 15px 0; color: #888; font-size: 13px; position: relative;">
+                  <span style="background: #fff; padding: 0 10px; z-index: 1; position: relative;">หรือ</span>
+                  <hr style="border: 0; border-top: 1px solid #ddd; position: absolute; top: 50%; left: 0; right: 0; margin: 0; z-index: 0;">
+                </div>
+                <button type="button" class="btn btn-secondary-outline btn-block" onclick="syncStudentsFromFolder()">
+                  <i class="fa-solid fa-arrows-spin"></i> ซิงค์รายชื่อจากโฟลเดอร์ใบหน้า (faces)
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Student List Card -->
+          <div class="card">
+            <div class="card-header">
+              <h2><i class="fa-solid fa-users"></i> นักศึกษาที่ลงทะเบียนแล้ว</h2>
+            </div>
+            <div class="card-body">
+              <div class="student-search-box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="student-search" placeholder="ค้นหา รหัส หรือ ชื่อ..." onkeyup="searchStudents()">
+              </div>
+              <div class="student-list" id="students-container">
+                <!-- Students items populate here -->
+                <p class="text-center text-muted">ไม่พบข้อมูลนักศึกษาที่ลงทะเบียน</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB content 4: BACKUP & OFFLINE CONTROL -->
+      <section id="sect-backup" class="tab-content">
+        <div class="dash-grid-2-1">
+          <!-- Information Panel for Offline Recovery -->
+          <div class="card">
+            <div class="card-header flex-col-align-start">
+              <h2><i class="fa-solid fa-shield-halved text-blue"></i> ข้อมูลการสำรองและกู้ระบบแบบออฟไลน์ (Offline Auto-Recovery)</h2>
+              <p class="card-header-desc">อธิบายการทำงานเมื่อเน็ตหลุด / เว็บล่ม และวิธีกู้ข้อมูล</p>
+            </div>
+            <div class="card-body text-layout">
+              <div class="feature-highlight">
+                <div class="highlight-header">
+                  <i class="fa-solid fa-circle-check text-green"></i>
+                  <h4>ระบบสำรองข้อมูลออฟไลน์อัตโนมัติ (Built-in Active Recovery)</h4>
+                </div>
+                <p>เราได้วางสถาปัตยกรรมระบบเพื่อให้มั่นใจว่า <strong>"เช็คชื่อได้ทุกครั้ง แม้ระบบอินเทอร์เน็ตล่ม หรือเว็บแอปเข้าไม่ได้"</strong> โดยมีแนวทางดังนี้:</p>
+              </div>
+              
+              <div class="step-card">
+                <span class="step-num">1</span>
+                <div>
+                  <strong>กลไกการสแกนใบหน้าแบบ Local:</strong>
+                  <p>ระบบประมวลผลใบหน้า (Python AI) ทำงานที่เครื่องของท่าน (เช่น บนบอร์ด Raspberry Pi หรือพีซี) โดยอ้างอิงไฟล์ Cache ใบหน้าถาวร <code>face_encodings_cache.pkl</code> ซึ่งสแกนแบบออฟไลน์ได้ 100% โดยไม่ต้องใช้เน็ต</p>
+                </div>
+              </div>
+
+              <div class="step-card">
+                <span class="step-num">2</span>
+                <div>
+                  <strong>บันทึกประวัติออฟไลน์ลงเครื่อง:</strong>
+                  <p>หากระบบหลักหรือหน้าเว็บตัดการทำงาน (HTTP Call ล้มเหลว) โปรแกรม Python GUI จะสลับการทำงานเป็น <em>"Offline mode"</em> อัตโนมัติ และเซฟรายการเช็คชื่อทันทีลงในไฟล์ <code>offline_attendance.json</code> ที่เครื่อง พร้อมแสดงตัวเลขจำนวนคิวที่ค้างรอไว้บนจอ GUI</p>
+                </div>
+              </div>
+
+              <div class="step-card">
+                <span class="step-num">3</span>
+                <div>
+                  <strong>ระบบ Sync ข้อมูลอัตโนมัติ (Auto-Sync Queue):</strong>
+                  <p>โปรแกรม Python GUI มี Thread ตรวจสอบสถานะการเชื่อมต่อกับเว็บเซิร์ฟเวอร์แบบเบื้องหลัง ทุกๆ 10 วินาที หากเน็ตกลับมาใช้ได้และเซิร์ฟเวอร์เปิดอยู่ ระบบจะส่งข้อมูลออฟไลน์ขึ้นมาบันทึกที่ Web App และล้างไฟล์แคช <code>offline_attendance.json</code> ออกให้อย่างปลอดภัย</p>
+                </div>
+              </div>
+
+              <div class="step-card">
+                <span class="step-num">4</span>
+                <div>
+                  <strong>การสำรองไฟล์เพื่อย้ายเครื่องหรือติดตั้งใหม่ (Manual Backup):</strong>
+                  <p>ท่านสามารถสำรองระบบทั้งหมดได้ง่ายมาก เพียงเก็บโฟลเดอร์เหล่านี้ไว้:</p>
+                  <ul>
+                    <li>โฟลเดอร์ <code>faces/</code>: เก็บรูปถ่ายทั้งหมดที่ใช้เทรน AI</li>
+                    <li>โฟลเดอร์ <code>web_app/db.json</code>: ฐานข้อมูลรายชื่อนักเรียน ประวัติเช็คชื่อ และเซสชันทั้งหมด</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Backup actions card -->
+          <div class="card">
+            <div class="card-header">
+              <h2><i class="fa-solid fa-file-export"></i> จัดการไฟล์สำรองข้อมูล (Backup)</h2>
+            </div>
+            <div class="card-body">
+              <div class="backup-action-box">
+                <h4>ส่งออกฐานข้อมูลหลัก</h4>
+                <p>ดาวน์โหลดไฟล์ฐานข้อมูล <code>db.json</code> ปัจจุบัน ซึ่งรวมรายชื่อทั้งหมด ประวัติการเช็คชื่อ และคาบเรียนทั้งหมดในระบบ สามารถนำมาวางทับเพื่อกู้คืนระบบได้ทันที</p>
+                <a href="/api/backup/export" class="btn btn-blue btn-block"><i class="fa-solid fa-download"></i> ดาวน์โหลดไฟล์สำรองข้อมูล (.json)</a>
+              </div>
+
+              <hr class="custom-hr">
+
+              <div class="backup-status-check">
+                <h4>สถานะความสมบูรณ์ของระบบ</h4>
+                <div class="status-list">
+                  <div class="status-item">
+                    <span><i class="fa-solid fa-folder-open text-muted"></i> โฟลเดอร์ใบหน้า (faces)</span>
+                    <span class="badge badge-green">ตรวจพบโฟลเดอร์</span>
+                  </div>
+                  <div class="status-item">
+                    <span><i class="fa-solid fa-file-shield text-muted"></i> ไฟล์ฐานข้อมูล (db.json)</span>
+                    <span class="badge badge-green" id="db-file-status">พร้อมใช้งาน</span>
+                  </div>
+                  <div class="status-item">
+                    <span><i class="fa-solid fa-link text-muted"></i> การเชื่อมต่อ Python Client</span>
+                    <span class="badge" id="client-conn-status">กำลังตรวจสอบ...</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB content 5: DETAILED REPORTS -->
+      <section id="sect-report" class="tab-content">
+        <div class="dash-grid-2-1">
+          <!-- Left Side: Table of Students and Attendance Status -->
+          <div class="card">
+            <div class="card-header flex-row-between">
+              <h2><i class="fa-solid fa-file-invoice"></i> ตารางแสดงสถานะการเช็คชื่อเข้าเรียน</h2>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-blue btn-sm" id="btn-export-csv" onclick="exportReportToCSV()" style="display: none;"><i class="fa-solid fa-file-excel"></i> ส่งออก Excel/CSV</button>
+                <button class="btn btn-secondary-outline btn-sm" onclick="loadSessionReport()"><i class="fa-solid fa-arrows-rotate"></i> รีเฟรช</button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="table-container">
+                <table class="styled-table">
+                  <thead>
+                    <tr>
+                      <th>รหัสนักศึกษา</th>
+                      <th>ชื่อ-นามสกุล</th>
+                      <th>เวลาสแกน</th>
+                      <th>สถานะ</th>
+                      <th>โหมด</th>
+                    </tr>
+                  </thead>
+                  <tbody id="report-table-body">
+                    <tr>
+                      <td colspan="5" class="text-center text-muted">กรุณาเลือกคาบเรียนจากแผงด้านข้าง</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Side: Select Session and Stats -->
+          <div class="card">
+            <div class="card-header">
+              <h2><i class="fa-solid fa-gears"></i> เลือกกิจกรรมวิชาเรียน</h2>
+            </div>
+            <div class="card-body">
+              <div class="form-group" style="margin-bottom: 20px;">
+                <label for="report-session-select"><i class="fa-solid fa-list-ul"></i> เลือกคาบเรียนที่ต้องการดู</label>
+                <select id="report-session-select" onchange="loadSessionReport()" class="styled-select" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--glass-border); outline: none; font-family: var(--font-main); background: var(--glass-highlight); color: var(--text-primary);">
+                  <option value="" style="background: var(--bg-dark); color: var(--text-primary);">-- เลือกคาบเรียน --</option>
+                </select>
+              </div>
+              
+              <div id="report-details-panel" class="hide">
+                <div class="report-meta-box" style="background: var(--glass-highlight); border: 1px solid var(--glass-border); border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                  <h4 id="rep-subject" style="color: var(--primary); font-size: 16px; margin-bottom: 5px; font-weight: 700;"></h4>
+                  <p id="rep-code" style="font-weight: bold; font-size: 13px; color: var(--text-secondary); margin-bottom: 10px;"></p>
+                  <hr style="border: 0; border-top: 1px solid var(--glass-border); margin: 10px 0;">
+                  <div style="font-size: 13px; line-height: 1.8; color: var(--text-secondary);">
+                    <div><i class="fa-regular fa-calendar" style="width: 18px;"></i> วันที่: <span id="rep-date" style="font-weight: 500;"></span></div>
+                    <div><i class="fa-regular fa-clock" style="width: 18px;"></i> เวลาเรียน: <span id="rep-time" style="font-weight: 500;"></span></div>
+                    <div><i class="fa-solid fa-clock-rotate-left" style="width: 18px;"></i> เริ่มเช็คสาย: <span id="rep-late" style="font-weight: 500;"></span></div>
+                    <div><i class="fa-solid fa-location-dot" style="width: 18px;"></i> สถานที่: <span id="rep-location" style="font-weight: 500;"></span></div>
+                    <div><i class="fa-solid fa-user-tie" style="width: 18px;"></i> ผู้สอน: <span id="rep-instructor" style="font-weight: 500;"></span></div>
+                  </div>
+                </div>
+
+                <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);"><i class="fa-solid fa-square-poll-vertical"></i> สรุปการเข้าห้องเรียน</h4>
+                <div class="stats-mini-row" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                  <div class="stat-mini-card" style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px; padding: 10px 5px; text-align: center;">
+                    <div style="font-size: 11px; color: var(--success); font-weight: 600; margin-bottom: 4px;">ตรงเวลา</div>
+                    <div style="font-size: 20px; font-weight: 700; color: var(--success);" id="rep-stat-ontime">0</div>
+                  </div>
+                  <div class="stat-mini-card" style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 8px; padding: 10px 5px; text-align: center;">
+                    <div style="font-size: 11px; color: var(--warning); font-weight: 600; margin-bottom: 4px;">สาย</div>
+                    <div style="font-size: 20px; font-weight: 700; color: var(--warning);" id="rep-stat-late">0</div>
+                  </div>
+                  <div class="stat-mini-card" style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 8px; padding: 10px 5px; text-align: center;">
+                    <div style="font-size: 11px; color: var(--danger); font-weight: 600; margin-bottom: 4px;">ขาดเรียน</div>
+                    <div style="font-size: 20px; font-weight: 700; color: var(--danger);" id="rep-stat-absent">0</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- Login Overlay Screen -->
+    <div id="login-overlay" class="login-overlay active">
+      <div class="login-card">
+        <div class="login-logo" style="margin-bottom: 10px;">
+          <h2 style="font-size: 22px; font-weight: 800; color: var(--text-primary);">ระบบเช็คชื่อเข้าเรียน</h2>
+          <p style="margin-top: 5px;">ระบบสแกนใบหน้าสำหรับผู้สอน</p>
+        </div>
+        <div id="login-error" class="login-error-msg hide"></div>
+        <form id="login-form" onsubmit="handleLogin(event)" style="display: flex; flex-direction: column; gap: 20px;">
+          <div class="form-group" style="display: flex; flex-direction: column; gap: 8px;">
+            <label for="login-username" style="font-size: 13px; font-weight: 600; color: var(--text-secondary); display: flex; align-items: center; gap: 8px;">
+              <i class="fa-solid fa-user" style="color: var(--primary);"></i> ชื่อผู้ใช้งาน
+            </label>
+            <input type="text" id="login-username" required autocomplete="username" style="width: 100%; box-sizing: border-box;">
+          </div>
+          <div class="form-group" style="display: flex; flex-direction: column; gap: 8px;">
+            <label for="login-password" style="font-size: 13px; font-weight: 600; color: var(--text-secondary); display: flex; align-items: center; gap: 8px;">
+              <i class="fa-solid fa-lock" style="color: var(--primary);"></i> รหัสผ่าน
+            </label>
+            <input type="password" id="login-password" required autocomplete="current-password" style="width: 100%; box-sizing: border-box;">
+          </div>
+          <div style="margin-top: 10px;">
+            <button type="submit" class="btn btn-primary btn-block" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 12px; font-size: 14px; font-weight: 700; border-radius: var(--radius-md); box-shadow: 0 4px 15px var(--primary-glow); cursor: pointer;">
+              <i class="fa-solid fa-right-to-bracket"></i> เข้าสู่ระบบ
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Edit Student Modal -->
+    <div id="edit-student-modal" class="modal-overlay hide">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3><i class="fa-solid fa-user-pen"></i> แก้ไขข้อมูลนักศึกษา</h3>
+          <button class="btn-close-modal" onclick="closeEditModal()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+          <div id="edit-error" class="error-msg hide" style="color: #ef4444; background: rgba(239, 68, 68, 0.1); padding: 10px; border-radius: 6px; margin-bottom: 15px; font-size: 13px;"></div>
+          <form id="edit-student-form" onsubmit="submitEditStudent(event)" class="styled-form">
+            <input type="hidden" id="edit-old-studentId">
+            <div class="form-group">
+              <label for="edit-studentId"><i class="fa-regular fa-id-card"></i> รหัสนักศึกษา</label>
+              <input type="text" id="edit-studentId" required>
+            </div>
+            <div class="form-group">
+              <label for="edit-name"><i class="fa-regular fa-user"></i> ชื่อ-นามสกุล</label>
+              <input type="text" id="edit-name" required>
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+              <button type="button" class="btn btn-secondary-outline btn-block" onclick="closeEditModal()">ยกเลิก</button>
+              <button type="submit" class="btn btn-primary btn-block">บันทึกการแก้ไข</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

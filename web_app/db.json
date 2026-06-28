@@ -1,0 +1,102 @@
+{
+  "students": [
+    {
+      "id": "B6614478",
+      "name": "ohm nana",
+      "registeredAt": "2026-06-23T15:50:25.336Z"
+    },
+    {
+      "id": "B6615406",
+      "name": "thamonawan Kroenkratok",
+      "registeredAt": "2026-06-23T15:50:25.337Z"
+    },
+    {
+      "id": "B6644468",
+      "name": "Attapi Jan",
+      "registeredAt": "2026-06-23T15:50:25.337Z"
+    },
+    {
+      "id": "Bjijief",
+      "name": "dfknds",
+      "registeredAt": "2026-06-28T07:19:05.907Z"
+    }
+  ],
+  "sessions": [
+    {
+      "id": "session_1782626936263",
+      "subjectCode": "แกแกอกอ",
+      "subjectName": "กอกอก",
+      "className": "แกแกอกอ - กอกอก",
+      "date": "2026-06-28",
+      "startTime": "00:08",
+      "endTime": "15:00",
+      "lateAfter": "12:08",
+      "location": "กอ",
+      "instructorName": "กอกอ",
+      "active": false,
+      "createdAt": "2026-06-28T06:08:56.263Z"
+    },
+    {
+      "id": "session_1782629241280",
+      "subjectCode": "พเพเพ",
+      "subjectName": "เพเ",
+      "className": "พเพเพ - เพเ",
+      "date": "2026-06-28",
+      "startTime": "13:48",
+      "endTime": "13:50",
+      "lateAfter": "13:46",
+      "location": "พเพพเพเ",
+      "instructorName": "พเพ",
+      "active": false,
+      "createdAt": "2026-06-28T06:47:21.280Z"
+    }
+  ],
+  "attendance": [
+    {
+      "studentId": "B6615406",
+      "studentName": "thamonawan Kroenkratok",
+      "sessionId": "session_1782626936263",
+      "className": "แกแกอกอ - กอกอก",
+      "subjectCode": "แกแกอกอ",
+      "time": "2026-06-28T06:09:06.711Z",
+      "status": "late",
+      "offline": false
+    },
+    {
+      "studentId": "B6615406",
+      "studentName": "thamonawan Kroenkratok",
+      "sessionId": "session_1782629241280",
+      "className": "พเพเพ - เพเ",
+      "subjectCode": "พเพเพ",
+      "time": "2026-06-28T06:48:05.043Z",
+      "status": "late",
+      "offline": false
+    },
+    {
+      "studentId": "B6644468",
+      "studentName": "Attapi Jan",
+      "sessionId": "session_1782629241280",
+      "className": "พเพเพ - เพเ",
+      "subjectCode": "พเพเพ",
+      "time": "2026-06-28T15:32:10.105798",
+      "status": "late",
+      "offline": true
+    },
+    {
+      "studentId": "Bjijief",
+      "studentName": "dfknds",
+      "sessionId": "session_1782629241280",
+      "className": "พเพเพ - เพเ",
+      "subjectCode": "พเพเพ",
+      "time": "2026-06-28T15:32:16.131201",
+      "status": "late",
+      "offline": true
+    }
+  ],
+  "users": [
+    {
+      "username": "admin",
+      "password": "123"
+    }
+  ]
+}
