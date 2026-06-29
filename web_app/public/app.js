@@ -16,7 +16,7 @@ const tabMeta = {
 
 // DOM Content Loaded
 document.addEventListener('DOMContentLoaded', () => {
-  const isLoggedIn = localStorage.getItem('isLoggedIn');
+  const isLoggedIn = sessionStorage.getItem('isLoggedIn');
   if (isLoggedIn === 'true') {
     document.getElementById('login-overlay').classList.remove('active');
     fetchDatabase();
@@ -658,8 +658,8 @@ async function handleLogin(e) {
       throw new Error(data.error || 'Login failed');
     }
 
-    localStorage.setItem('isLoggedIn', 'true');
-    localStorage.setItem('username', data.username);
+    sessionStorage.setItem('isLoggedIn', 'true');
+    sessionStorage.setItem('username', data.username);
     
     document.getElementById('login-overlay').classList.remove('active');
     fetchDatabase();
@@ -671,8 +671,8 @@ async function handleLogin(e) {
 }
 
 function handleLogout() {
-  localStorage.removeItem('isLoggedIn');
-  localStorage.removeItem('username');
+  sessionStorage.removeItem('isLoggedIn');
+  sessionStorage.removeItem('username');
   document.getElementById('login-overlay').classList.add('active');
   // Clear inputs
   document.getElementById('login-username').value = '';
