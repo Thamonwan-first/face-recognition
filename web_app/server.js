@@ -176,7 +176,7 @@ function sendSseAlert(type, payload) {
 // Trigger python reload
 function notifyPythonReload() {
   const options = {
-    hostname: 'localhost',
+    hostname: '127.0.0.1',
     port: 5001,
     path: '/reload',
     method: 'POST',

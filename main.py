@@ -329,7 +329,7 @@ class Pi5PortraitDash(tk.Tk):
 
     def start_local_server(self):
         try:
-            server = HTTPServer(('localhost', 5001), PythonAPIHandler)
+            server = HTTPServer(('0.0.0.0', 5001), PythonAPIHandler)
             server.serve_forever()
         except Exception as e:
             self.add_log(f"⚠️ ไม่สามารถสตาร์ทพอร์ตควบคุม 5001 ได้: {e}")

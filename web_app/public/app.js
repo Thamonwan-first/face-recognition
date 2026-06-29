@@ -480,7 +480,8 @@ function setupDragAndDrop() {
 function updateBackupStatus(activeSession) {
   const statusBadge = document.getElementById('client-conn-status');
   // Ping python port (5001) to see if it is running
-  fetch('http://localhost:5001/status', { method: 'GET', mode: 'no-cors', timeout: 1000 })
+  const hostname = window.location.hostname || 'localhost';
+  fetch(`http://${hostname}:5001/status`, { method: 'GET', mode: 'no-cors', timeout: 1000 })
     .then(() => {
       statusBadge.innerText = 'เชื่อมต่อกล้องอยู่';
       statusBadge.className = 'badge badge-green';
