@@ -477,13 +477,21 @@ class Pi5PortraitDash(tk.Tk):
                     rgb_col = (bgr_col[2], bgr_col[1], bgr_col[0]) if len(bgr_col) == 3 else (255, 255, 255)
                     
                     draw.text((20, ih - 48), self.status_display_text, fill=rgb_col, font=font) 
-                # ดึงขนาดของวิดเจ็ตเฟรมกล้องจริงแบบไดนามิก เพื่อให้ภาพขยายเต็มพื้นที่จอโดยอัตโนมัติ
+                # ดึงขนาดของวิดเจ็ตเฟรมกล้องจริงแบบไดนามิก เพื่อให้ภาพขยายเต็มพื้นที่จอโดยอัตโนมัติแบบรักษาสัดส่วน (Aspect Ratio)
                 w = self.v_label.winfo_width()
                 h = self.v_label.winfo_height()
                 if w > 10 and h > 10:
-                    img = img.resize((w, h), PILImage.Resampling.NEAREST)
+                    img_w, img_h = img.size
+                    scale = min(w / img_w, h / img_h)
+                    new_w = max(1, int(img_w * scale))
+                    new_h = max(1, int(img_h * scale))
+                    img = img.resize((new_w, new_h), PILImage.Resampling.BILINEAR)
                 else:
-                    img = img.resize((700, 1022), PILImage.Resampling.NEAREST) 
+                    img_w, img_h = img.size
+                    scale = min(700 / img_w, 1022 / img_h)
+                    new_w = max(1, int(img_w * scale))
+                    new_h = max(1, int(img_h * scale))
+                    img = img.resize((new_w, new_h), PILImage.Resampling.BILINEAR) 
                 tk_img = ImageTk.PhotoImage(image=img) 
                 self.v_label.imgtk = tk_img; self.v_label.config(image=tk_img) 
         except: pass 
