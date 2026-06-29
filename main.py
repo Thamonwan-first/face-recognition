@@ -72,7 +72,7 @@ def load_encodings(cache_path):
 def ai_worker(frame_q, result_q, ctrl_ev, reload_ev, faces_dir, cache_path, rotation_val): 
     known_encs, known_names = load_encodings(cache_path)
      
-    cap = cv2.VideoCapture(0) 
+    cap = cv2.VideoCapture(1) 
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640) 
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480) 
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
@@ -123,7 +123,8 @@ class Pi5PortraitDash(tk.Tk):
         super().__init__() 
         self.title("PI 5 PORTRAIT DASHBOARD") 
         
-        # ตั้งค่าให้เปิดเต็มหน้าจอ (Fullscreen)
+        # ตั้งค่าให้เปิดเต็มหน้าจอ (Fullscreen) - เพิ่ม self.update() เพื่อรองรับ Wayland บน Pi 5
+        self.update()
         self.attributes('-fullscreen', True)
         # กดปุ่ม Esc เพื่อออกจากโหมดเต็มจอ
         self.bind("<Escape>", lambda event: self.attributes("-fullscreen", False))
@@ -630,8 +631,8 @@ class Pi5PortraitDash(tk.Tk):
             except requests.exceptions.RequestException:
                 # เซิร์ฟเวอร์เว็บล่ม / ตัดการเชื่อมต่อ -> สลับเข้าโหมดบันทึกออฟไลน์
                 self.add_log(f"⚠️ ตัดการเชื่อมต่อเว็บแอป: สลับเข้าสู่โหมดออฟไลน์")
-                p = name.split('-')
-                std_name = p[1] if len(p) >= 2 else name
+                parts = name.split('-', 1)
+                std_name = parts[1] if len(parts) >= 2 else name
                 
                 # แสดงข้อความออฟไลน์บนหน้าจอ
                 self.status_display_text = f"บันทึกออฟไลน์แล้ว: {std_name} (รอเชื่อมเน็ต)"

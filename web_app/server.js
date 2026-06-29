@@ -90,9 +90,9 @@ function syncFacesFolderToDb() {
   dirs.forEach(dirName => {
     const fullPath = path.join(FACES_DIR, dirName);
     if (fs.statSync(fullPath).isDirectory() && dirName.includes('-')) {
-      const parts = dirName.split('-');
-      const id = parts[0].trim();
-      const name = parts[1].trim();
+      const hyphenIndex = dirName.indexOf('-');
+      const id = dirName.substring(0, hyphenIndex).trim();
+      const name = dirName.substring(hyphenIndex + 1).trim();
 
       if (!existingIds.has(id)) {
         const studentObj = {
@@ -259,13 +259,14 @@ app.get('/api/sessions/:id/report', (req, res) => {
   // This reduces complexity from O(Students * Attendance) to O(Students + Attendance)
   const attendanceMap = new Map();
   db.attendance.forEach(a => {
-    if (a.sessionId === id) {
-      attendanceMap.set(a.studentId, a);
+    if (a.sessionId === id && a.studentId) {
+      attendanceMap.set(a.studentId.toString().trim().toUpperCase(), a);
     }
   });
 
   const report = db.students.map(student => {
-    const record = attendanceMap.get(student.id);
+    const studentKey = (student.id || '').toString().trim().toUpperCase();
+    const record = studentKey ? attendanceMap.get(studentKey) : null;
     if (record) {
       return {
         studentId: student.id,
@@ -495,9 +496,9 @@ app.post('/api/attendance/checkin', (req, res) => {
   }
 
   // Parse ID and Name: B6615406-thamonawan Kroenkratok
-  const parts = name_id.split('-');
-  const studentId = parts[0].trim();
-  const studentName = parts.length > 1 ? parts[1].trim() : '';
+  const hyphenIndex = name_id.indexOf('-');
+  const studentId = hyphenIndex !== -1 ? name_id.substring(0, hyphenIndex).trim() : name_id.trim();
+  const studentName = hyphenIndex !== -1 ? name_id.substring(hyphenIndex + 1).trim() : '';
 
   // 1. Get active session
   const activeSession = db.sessions.find(s => s.active);
@@ -542,7 +543,7 @@ app.post('/api/attendance/checkin', (req, res) => {
 
   // 3. Check if student already checked in for this session
   const alreadyCheckedIn = db.attendance.find(
-    a => a.studentId === studentId && a.sessionId === activeSession.id
+    a => a.studentId.trim().toUpperCase() === studentId.trim().toUpperCase() && a.sessionId === activeSession.id
   );
 
   if (alreadyCheckedIn) {
@@ -604,14 +605,14 @@ app.post('/api/attendance/sync_offline', (req, res) => {
 
   let syncCount = 0;
   records.forEach(rec => {
-    const parts = rec.name_id.split('-');
-    const studentId = parts[0].trim();
-    const studentName = parts.length > 1 ? parts[1].trim() : '';
+    const hyphenIndex = rec.name_id.indexOf('-');
+    const studentId = hyphenIndex !== -1 ? rec.name_id.substring(0, hyphenIndex).trim() : rec.name_id.trim();
+    const studentName = hyphenIndex !== -1 ? rec.name_id.substring(hyphenIndex + 1).trim() : '';
     const recordTime = rec.time;
 
     // Check duplicate checkin in database
     const alreadyChecked = db.attendance.find(
-      a => a.studentId === studentId && a.sessionId === activeSession.id
+      a => a.studentId.trim().toUpperCase() === studentId.trim().toUpperCase() && a.sessionId === activeSession.id
     );
 
     if (!alreadyChecked) {
