@@ -450,33 +450,7 @@ class Pi5PortraitDash(tk.Tk):
 
                 img = PILImage.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)) 
 
-                # วาดแถบแจ้งเตือนสถานะการเช็คชื่อที่ขอบล่างของเฟรมภาพกล้อง (Drawing overlay status banner in PIL to support Thai Unicode)
-                if time.time() < self.status_display_expiry:
-                    draw = ImageDraw.Draw(img)
-                    font = None
-                    font_paths = [
-                        "tahoma.ttf",  # Windows standard
-                        "/usr/share/fonts/truetype/tlwg/Loma.ttf",  # Pi 5 standard Thai font (Sansa-serif)
-                        "/usr/share/fonts/truetype/tlwg/Waree-Bold.ttf",  # Pi 5 Thai bold
-                        "/usr/share/fonts/truetype/thai/thsarabun.ttf", # Standard Sarabun path
-                        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"  # Fallback
-                    ]
-                    for path in font_paths:
-                        try:
-                            font = ImageFont.truetype(path, 26)
-                            break
-                        except:
-                            continue
-                    if font is None:
-                        font = ImageFont.load_default()
 
-                    iw, ih = img.size
-                    draw.rectangle([(0, ih - 60), (iw, ih)], fill=(0, 0, 0))
-                    
-                    bgr_col = self.status_display_color
-                    rgb_col = (bgr_col[2], bgr_col[1], bgr_col[0]) if len(bgr_col) == 3 else (255, 255, 255)
-                    
-                    draw.text((20, ih - 48), self.status_display_text, fill=rgb_col, font=font) 
                 # ดึงขนาดของวิดเจ็ตเฟรมกล้องจริงแบบไดนามิก เพื่อให้ภาพขยายเต็มพื้นที่จอโดยอัตโนมัติแบบรักษาสัดส่วน (Aspect Ratio)
                 w = self.v_label.winfo_width()
                 h = self.v_label.winfo_height()
