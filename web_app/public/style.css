@@ -435,12 +435,17 @@ body {
 .badge-orange { background: rgba(245, 158, 11, 0.15); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.3); }
 .badge-red { background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3); }
 
+.live-alerts-card .card-body{
+  display: flex;
+  flex-direction: column;
+}
+
 .live-alerts-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-height: 480px;
-  overflow-y: auto;
+  height: 1200px;
+  overflow-y: hidden;
   padding: 4px 8px; /* Symmetrical padding left & right */
   scrollbar-width: thin; /* Firefox */
   scrollbar-color: rgba(255, 255, 255, 0.15) transparent; /* Firefox */
@@ -466,7 +471,8 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 250px;
+  flex: 1;
+  min-height: 250px;
   color: var(--text-secondary);
   gap: 16px;
   text-align: center;
@@ -500,6 +506,7 @@ body {
   animation: slideIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.1) forwards;
   position: relative;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 @keyframes slideIn {
