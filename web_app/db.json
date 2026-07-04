@@ -44,172 +44,68 @@
       "id": "B6985",
       "name": "ohm ohm",
       "registeredAt": "2026-06-29T12:36:32.540Z"
+    },
+    {
+      "id": "Bjijief",
+      "name": "dfknds",
+      "registeredAt": "2026-07-04T08:01:32.395Z"
     }
   ],
   "sessions": [
     {
-      "id": "session_1782626936263",
-      "subjectCode": "แกแกอกอ",
-      "subjectName": "กอกอก",
-      "className": "แกแกอกอ - กอกอก",
-      "date": "2026-06-28",
-      "startTime": "00:08",
-      "endTime": "15:00",
-      "lateAfter": "12:08",
-      "location": "กอ",
-      "instructorName": "กอกอ",
+      "id": "session_1783156123015",
+      "subjectCode": "กดกดกด",
+      "subjectName": "กดกด",
+      "className": "กดกดกด - กดกด",
+      "date": "2026-07-04",
+      "startTime": "16:08",
+      "endTime": "17:08",
+      "lateAfter": "16:08",
+      "location": "ดกด",
+      "instructorName": "กดกด",
       "active": false,
-      "createdAt": "2026-06-28T06:08:56.263Z"
+      "createdAt": "2026-07-04T09:08:43.015Z"
     },
     {
-      "id": "session_1782629241280",
-      "subjectCode": "พเพเพ",
-      "subjectName": "เพเ",
-      "className": "พเพเพ - เพเ",
-      "date": "2026-06-28",
-      "startTime": "13:48",
-      "endTime": "13:50",
-      "lateAfter": "13:46",
-      "location": "พเพพเพเ",
-      "instructorName": "พเพ",
+      "id": "session_1783162907583",
+      "subjectCode": "xvfdv",
+      "subjectName": "fvdf",
+      "className": "xvfdv - fvdf",
+      "date": "2569-07-04",
+      "startTime": "18:00",
+      "endTime": "19:00",
+      "lateAfter": "18:00",
+      "location": "vfdv",
+      "instructorName": "fvdf",
       "active": false,
-      "createdAt": "2026-06-28T06:47:21.280Z"
+      "createdAt": "2026-07-04T11:01:47.583Z"
     },
     {
-      "id": "session_1782734174428",
-      "subjectCode": "socjoscos",
-      "subjectName": "dcvsdcsdcd",
-      "className": "socjoscos - dcvsdcsdcd",
-      "date": "2026-06-29",
-      "startTime": "12:00",
-      "endTime": "19:30",
-      "lateAfter": "17:00",
-      "location": "dcsdcdscds",
-      "instructorName": "cdscsdcdsc",
-      "active": false,
-      "createdAt": "2026-06-29T11:56:14.428Z"
-    },
-    {
-      "id": "session_1782736504562",
-      "subjectCode": "gfgdgdfg",
-      "subjectName": "fdgdfg",
-      "className": "gfgdgdfg - fdgdfg",
-      "date": "2026-06-29",
-      "startTime": "17:00",
-      "endTime": "20:00",
-      "lateAfter": "17:00",
-      "location": "fgdfgdfg",
-      "instructorName": "fdgdfg",
-      "active": false,
-      "createdAt": "2026-06-29T12:35:04.562Z"
+      "id": "session_1783163552804",
+      "subjectCode": "dcd",
+      "subjectName": "cdc",
+      "className": "dcd - cdc",
+      "date": "2569-07-16",
+      "startTime": "18:12",
+      "endTime": "18:30",
+      "lateAfter": "18:13",
+      "location": "dcscd",
+      "instructorName": "dcsd",
+      "active": true,
+      "createdAt": "2026-07-04T11:12:32.804Z"
     }
   ],
-  "attendance": [
-    {
-      "studentId": "B6615406",
-      "studentName": "thamonawan Kroenkratok",
-      "sessionId": "session_1782626936263",
-      "className": "แกแกอกอ - กอกอก",
-      "subjectCode": "แกแกอกอ",
-      "time": "2026-06-28T06:09:06.711Z",
-      "status": "late",
-      "offline": false
-    },
-    {
-      "studentId": "B6615406",
-      "studentName": "thamonawan Kroenkratok",
-      "sessionId": "session_1782629241280",
-      "className": "พเพเพ - เพเ",
-      "subjectCode": "พเพเพ",
-      "time": "2026-06-28T06:48:05.043Z",
-      "status": "late",
-      "offline": false
-    },
-    {
-      "studentId": "B6644468",
-      "studentName": "Attapi Jan",
-      "sessionId": "session_1782629241280",
-      "className": "พเพเพ - เพเ",
-      "subjectCode": "พเพเพ",
-      "time": "2026-06-28T15:32:10.105798",
-      "status": "late",
-      "offline": true
-    },
-    {
-      "studentId": "B6615406",
-      "studentName": "th kr",
-      "sessionId": "session_1782734174428",
-      "className": "socjoscos - dcvsdcsdcd",
-      "subjectCode": "socjoscos",
-      "time": "2026-06-29T11:56:22.788Z",
-      "status": "late",
-      "offline": false
-    },
-    {
-      "studentId": "B6521295",
-      "studentName": "Sirilak YANGUAONG",
-      "sessionId": "session_1782734174428",
-      "className": "socjoscos - dcvsdcsdcd",
-      "subjectCode": "socjoscos",
-      "time": "2026-06-29T12:00:20.850Z",
-      "status": "late",
-      "offline": false
-    },
-    {
-      "studentId": "้B6513764",
-      "studentName": "Chitsanuphong",
-      "sessionId": "session_1782734174428",
-      "className": "socjoscos - dcvsdcsdcd",
-      "subjectCode": "socjoscos",
-      "time": "2026-06-29T12:08:47.928Z",
-      "status": "late",
-      "offline": false
-    },
-    {
-      "studentId": "Test123",
-      "studentName": "Pong Pang",
-      "sessionId": "session_1782734174428",
-      "className": "socjoscos - dcvsdcsdcd",
-      "subjectCode": "socjoscos",
-      "time": "2026-06-29T12:09:54.694Z",
-      "status": "late",
-      "offline": false
-    },
-    {
-      "studentId": "B6615406",
-      "studentName": "th kr",
-      "sessionId": "session_1782736504562",
-      "className": "gfgdgdfg - fdgdfg",
-      "subjectCode": "gfgdgdfg",
-      "time": "2026-06-29T12:35:10.289Z",
-      "status": "late",
-      "offline": false
-    },
-    {
-      "studentId": "Test123",
-      "studentName": "Pong Pang",
-      "sessionId": "session_1782736504562",
-      "className": "gfgdgdfg - fdgdfg",
-      "subjectCode": "gfgdgdfg",
-      "time": "2026-06-29T12:35:45.047Z",
-      "status": "late",
-      "offline": false
-    },
-    {
-      "studentId": "B6985",
-      "studentName": "ohm ohm",
-      "sessionId": "session_1782736504562",
-      "className": "gfgdgdfg - fdgdfg",
-      "subjectCode": "gfgdgdfg",
-      "time": "2026-06-29T12:36:42.827Z",
-      "status": "late",
-      "offline": false
-    }
-  ],
+  "attendance": [],
   "users": [
     {
       "username": "admin",
-      "password": "123"
+      "password": "123",
+      "role": "admin"
+    },
+    {
+      "username": "T001",
+      "password": "123",
+      "role": "teacher"
     }
   ]
 }

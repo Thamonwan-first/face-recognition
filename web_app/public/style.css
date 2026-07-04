@@ -631,6 +631,7 @@ body {
 }
 
 .styled-form input[type="text"],
+.styled-form input[type="password"],
 .styled-form input[type="date"],
 .styled-form input[type="time"] {
   background: var(--glass-highlight);

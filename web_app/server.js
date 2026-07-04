@@ -55,15 +55,39 @@ function loadDb() {
   } else {
     saveDb();
   }
-  // Initialize default admin user if none exists
+  // Initialize default users if none exists
   if (!db.users || db.users.length === 0) {
     db.users = [
-      { username: 'admin', password: '123' }
+      { username: 'admin', password: '123', role: 'admin' }
     ];
     saveDb();
+  } else {
+    // Migration: ensure every user has a role
+    let changed = false;
+    db.users.forEach(u => {
+      if (!u.role) {
+        u.role = u.username === 'admin' ? 'admin' : 'teacher';
+        changed = true;
+      }
+    });
+    if (changed) {
+      saveDb();
+    }
   }
   // Sync directories to database to register any folders already in faces/
   syncFacesFolderToDb();
+
+  // Watch the faces folder for automatic real-time synchronization
+  if (fs.existsSync(FACES_DIR)) {
+    fs.watch(FACES_DIR, (eventType, filename) => {
+      // Debounce the call to avoid rapid consecutive triggers when multiple files are copied
+      if (global.syncTimeout) clearTimeout(global.syncTimeout);
+      global.syncTimeout = setTimeout(() => {
+        console.log('Detected change in faces folder. Auto-syncing...');
+        syncFacesFolderToDb();
+      }, 1000);
+    });
+  }
 }
 
 // Save database
@@ -141,6 +165,9 @@ function autoDeactivateExpiredSessions() {
 
 loadDb();
 
+// Automatically deactivate expired sessions every 30 seconds
+setInterval(autoDeactivateExpiredSessions, 30000);
+
 // Multer Storage Configuration for student photo registration
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -214,6 +241,7 @@ app.get('/api/alerts', (req, res) => {
 
 // Get current system data
 app.get('/api/db', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   autoDeactivateExpiredSessions();
   syncFacesFolderToDb();
   res.json({
@@ -234,7 +262,55 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(401).json({ error: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' });
   }
 
-  res.json({ success: true, token: 'session_active_' + user.username, username: user.username });
+  res.json({ 
+    success: true, 
+    token: 'session_active_' + user.username, 
+    username: user.username,
+    role: user.role || (user.username === 'admin' ? 'admin' : 'teacher')
+  });
+});
+
+// Add new user (Admin only)
+app.post('/api/users', (req, res) => {
+  const { username, password, role } = req.body;
+  if (!username || !password || !role) {
+    return res.status(400).json({ error: 'กรุณากรอกข้อมูลให้ครบถ้วน (ชื่อผู้ใช้, รหัสผ่าน, บทบาท)' });
+  }
+
+  const cleanUsername = username.trim().toLowerCase();
+  const existing = db.users.find(u => u.username.toLowerCase() === cleanUsername);
+  if (existing) {
+    return res.status(400).json({ error: 'ชื่อผู้ใช้นี้มีอยู่ในระบบแล้ว' });
+  }
+
+  const newUser = {
+    username: username.trim(),
+    password: password,
+    role: role
+  };
+
+  db.users.push(newUser);
+  saveDb();
+  res.json({ success: true, users: db.users });
+});
+
+// Delete user (Admin only)
+app.delete('/api/users/:username', (req, res) => {
+  const { username } = req.params;
+  const targetUsername = username.trim();
+  
+  if (targetUsername.toLowerCase() === 'admin') {
+    return res.status(400).json({ error: 'ไม่สามารถลบผู้ดูแลระบบหลัก (admin) ได้' });
+  }
+
+  const index = db.users.findIndex(u => u.username === targetUsername);
+  if (index === -1) {
+    return res.status(404).json({ error: 'ไม่พบผู้ใช้นี้ในระบบ' });
+  }
+
+  db.users.splice(index, 1);
+  saveDb();
+  res.json({ success: true, users: db.users });
 });
 
 // Sync students manually from faces/ folder

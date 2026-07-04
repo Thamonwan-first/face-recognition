@@ -36,6 +36,9 @@
         <button class="nav-btn" id="tab-reg" onclick="switchTab('register')">
           <i class="fa-solid fa-user-plus"></i> ลงทะเบียนนักศึกษา (Register)
         </button>
+        <button class="nav-btn" id="tab-users" onclick="switchTab('users')">
+          <i class="fa-solid fa-user-gear"></i> จัดการบัญชีอาจารย์ (Users)
+        </button>
         <button class="nav-btn" id="tab-backup" onclick="switchTab('backup')">
           <i class="fa-solid fa-database"></i> สำรองระบบ (Backup/Restore)
         </button>
@@ -285,6 +288,54 @@
         </div>
       </section>
 
+      <!-- TAB content 6: USER MANAGEMENT (Admin only) -->
+      <section id="sect-users" class="tab-content">
+        <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 20px; align-items: start;">
+          <!-- Left Side: Add Teacher Form -->
+          <div class="card">
+            <div class="card-header">
+              <h2><i class="fa-solid fa-user-plus"></i> เพิ่มบัญชีอาจารย์ใหม่</h2>
+            </div>
+            <div class="card-body">
+              <form id="add-user-form" onsubmit="handleAddUser(event)" class="styled-form">
+                <div class="form-group">
+                  <label for="new-username"><i class="fa-regular fa-user"></i> ชื่อผู้ใช้งาน (Username)</label>
+                  <input type="text" id="new-username" required placeholder="เช่น ajarn_somchai">
+                  <span style="font-size: 11px; color: var(--text-secondary); display: block; margin-top: 4px;">ภาษาอังกฤษ ตัวเลข หรือเครื่องหมาย underscore (_) เท่านั้น</span>
+                </div>
+                <div class="form-group">
+                  <label for="new-password"><i class="fa-solid fa-lock"></i> รหัสผ่าน (Password)</label>
+                  <input type="password" id="new-password" required placeholder="กำหนดรหัสผ่าน">
+                </div>
+                <button type="submit" class="btn btn-primary btn-block"><i class="fa-solid fa-plus"></i> เพิ่มรายชื่ออาจารย์</button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Right Side: List of Teachers -->
+          <div class="card">
+            <div class="card-header">
+              <h2><i class="fa-solid fa-users-gear text-blue"></i> รายชื่อผู้ใช้งานในระบบ</h2>
+            </div>
+            <div class="card-body">
+              <div class="table-container">
+                <table class="styled-table">
+                  <thead>
+                    <tr>
+                      <th>ชื่อผู้ใช้งาน</th>
+                      <th class="text-center">การจัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody id="users-table-body">
+                    <!-- Loaded dynamically via app.js -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- TAB content 4: BACKUP & OFFLINE CONTROL -->
       <section id="sect-backup" class="tab-content">
         <div class="dash-grid-2-1">
@@ -377,33 +428,36 @@
         </div>
       </section>
 
-      <!-- TAB content 5: DETAILED REPORTS -->
+            <!-- TAB content 5: DETAILED REPORTS -->
       <section id="sect-report" class="tab-content">
         <div class="dash-grid-2-1">
-          <!-- Left Side: Table of Students and Attendance Status -->
+          <!-- Left Side: Table of Session Attendance (No individual percentage) -->
           <div class="card">
             <div class="card-header flex-row-between">
-              <h2><i class="fa-solid fa-file-invoice"></i> ตารางแสดงสถานะการเช็คชื่อเข้าเรียน</h2>
+              <h2><i class="fa-solid fa-users"></i> สถิติการเข้าเรียนรายบุคคล</h2>
               <div style="display: flex; gap: 8px;">
-                <button class="btn btn-blue btn-sm" id="btn-export-csv" onclick="exportReportToCSV()" style="display: none;"><i class="fa-solid fa-file-excel"></i> ส่งออก Excel/CSV</button>
+                <button class="btn btn-blue btn-sm" id="btn-export-course-csv" onclick="exportSessionReportToCSV()" style="display: none;"><i class="fa-solid fa-file-excel"></i> ส่งออก Excel/CSV</button>
                 <button class="btn btn-secondary-outline btn-sm" onclick="loadSessionReport()"><i class="fa-solid fa-arrows-rotate"></i> รีเฟรช</button>
               </div>
             </div>
             <div class="card-body">
+              <div class="student-search-box" style="margin-bottom: 15px;">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="course-student-search" placeholder="ค้นหา รหัส หรือ ชื่อนักศึกษา..." onkeyup="filterSessionReportStudents()">
+              </div>
               <div class="table-container">
                 <table class="styled-table">
                   <thead>
                     <tr>
                       <th>รหัสนักศึกษา</th>
                       <th>ชื่อ-นามสกุล</th>
-                      <th>เวลาสแกน</th>
-                      <th>สถานะ</th>
-                      <th>โหมด</th>
+                      <th>เวลาเช็คชื่อ</th>
+                      <th class="text-center">สถานะ</th>
                     </tr>
                   </thead>
-                  <tbody id="report-table-body">
+                  <tbody id="course-report-table-body">
                     <tr>
-                      <td colspan="5" class="text-center text-muted">กรุณาเลือกคาบเรียนจากแผงด้านข้าง</td>
+                      <td colspan="4" class="text-center text-muted">กรุณาเลือกคาบเรียนจากแผงด้านข้าง</td>
                     </tr>
                   </tbody>
                 </table>
@@ -411,10 +465,10 @@
             </div>
           </div>
 
-          <!-- Right Side: Select Session and Stats -->
+          <!-- Right Side: Select Session and Stats Summary -->
           <div class="card">
             <div class="card-header">
-              <h2><i class="fa-solid fa-gears"></i> เลือกกิจกรรมวิชาเรียน</h2>
+              <h2><i class="fa-solid fa-clock-rotate-left"></i> เลือกคาบเรียน</h2>
             </div>
             <div class="card-body">
               <div class="form-group" style="margin-bottom: 20px;">
@@ -438,8 +492,8 @@
                   </div>
                 </div>
 
-                <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);"><i class="fa-solid fa-square-poll-vertical"></i> สรุปการเข้าห้องเรียน</h4>
-                <div class="stats-mini-row" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);"><i class="fa-solid fa-square-poll-vertical"></i> สรุปการเข้าห้องเรียนคาบนี้</h4>
+                <div class="stats-mini-row" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px;">
                   <div class="stat-mini-card" style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px; padding: 10px 5px; text-align: center;">
                     <div style="font-size: 11px; color: var(--success); font-weight: 600; margin-bottom: 4px;">ตรงเวลา</div>
                     <div style="font-size: 20px; font-weight: 700; color: var(--success);" id="rep-stat-ontime">0</div>
@@ -453,14 +507,19 @@
                     <div style="font-size: 20px; font-weight: 700; color: var(--danger);" id="rep-stat-absent">0</div>
                   </div>
                 </div>
+
+                <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-primary);"><i class="fa-solid fa-graduation-cap"></i> เปอร์เซ็นต์เข้าเรียนรวมทั้งวิชา</h4>
+                <div class="overall-progress-card" style="background: var(--glass-highlight); border: 1px solid var(--glass-border); border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 20px;">
+                  <div style="font-size: 32px; font-weight: 800; color: var(--success); margin-bottom: 8px;" id="course-overall-pct">0.00%</div>
+                  <div class="progress-bar-container" style="background: rgba(0,0,0,0.1); border-radius: 10px; height: 10px; overflow: hidden; margin: 0 auto; width: 80%;">
+                    <div id="course-overall-progress-bar" style="background: var(--success); height: 100%; width: 0%;"></div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-        </section>
-      </main>
-    </div>
-
-    <!-- Login Overlay Screen -->
+        </div>
+      </section>    <!-- Login Overlay Screen -->
     <div id="login-overlay" class="login-overlay active">
       <div class="login-card">
         <div class="login-logo" style="margin-bottom: 10px;">

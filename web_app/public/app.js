@@ -11,6 +11,7 @@ const tabMeta = {
   sessions: { title: "กำหนดเวลาเช็คชื่อ (Sessions)", subtitle: "จัดการคาบเรียนและช่วงเวลาเปิดรับสแกนใบหน้า" },
   report: { title: "รายงานการเข้าเรียน (Reports)", subtitle: "สรุปผลผู้เข้าเรียน สาย และขาดเรียนแบบเรียลไทม์" },
   register: { title: "ลงทะเบียนนักศึกษา (Register)", subtitle: "ลงทะเบียนใบหน้าคู่กับรหัสนักศึกษาลงระบบ AI" },
+  users: { title: "จัดการบัญชีอาจารย์ (Users)", subtitle: "จัดการรายชื่อผู้ใช้อาจารย์ที่สามารถใช้งานระบบได้" },
   backup: { title: "สำรองและกู้ข้อมูลระบบ (Backup & Sync)", subtitle: "จัดการประวัติการเช็คชื่อ ความปลอดภัย และความสมบูรณ์" }
 };
 
@@ -19,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const isLoggedIn = sessionStorage.getItem('isLoggedIn');
   if (isLoggedIn === 'true') {
     document.getElementById('login-overlay').classList.remove('active');
+    updateSidebarByRole();
     fetchDatabase();
     initRealTimeAlerts();
   } else {
@@ -48,6 +50,7 @@ function switchTab(tabName) {
     populateReportSessionsDropdown();
   }
   else if (tabName === 'register') document.getElementById('tab-reg').classList.add('active');
+  else if (tabName === 'users') document.getElementById('tab-users').classList.add('active');
   else if (tabName === 'backup') document.getElementById('tab-backup').classList.add('active');
 
   // Update header text
@@ -72,7 +75,7 @@ function toggleSidebar() {
 // Fetch DB from API
 async function fetchDatabase() {
   try {
-    const res = await fetch('/api/db');
+    const res = await fetch(`/api/db?_=${Date.now()}`);
     if (!res.ok) throw new Error('Failed to fetch DB');
     const data = await res.json();
     appState = data;
@@ -134,6 +137,12 @@ function updateUI() {
   renderAttendanceTable();
   renderSessionsList();
   renderStudentsList();
+  
+  const userRole = sessionStorage.getItem('userRole');
+  if (userRole === 'admin') {
+    renderUsersTable();
+  }
+  
   updateBackupStatus(activeSession);
 }
 
@@ -153,7 +162,7 @@ function renderAttendanceTable() {
   sorted.forEach(a => {
     const row = document.createElement('tr');
     
-    const timeFormatted = new Date(a.time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const timeFormatted = new Date(a.time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
     const dateFormatted = new Date(a.time).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
     
     const statusHtml = a.status === 'late'
@@ -499,7 +508,7 @@ function initRealTimeAlerts() {
 
   eventSource.onmessage = (event) => {
     const data = JSON.parse(event.data);
-    const timeStr = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const timeStr = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
     
     // Clear standby loader msg if it exists
     const standbyMsg = container.querySelector('.no-alerts-msg');
@@ -527,9 +536,9 @@ function initRealTimeAlerts() {
         `;
         
         // Reload report in real-time if active in reports tab
-        const repSelect = document.getElementById('report-session-select');
-        if (repSelect && repSelect.value === data.payload.sessionId) {
-          loadSessionReport();
+        const courseSelect = document.getElementById('report-course-select');
+        if (courseSelect && courseSelect.value === data.payload.subjectCode) {
+          loadCourseReport();
         }
         
         // ดึงข้อมูลฐานข้อมูลมาอัปเดตสถิติและตารางบนหน้าเว็บแบบเรียลไทม์ทันที
@@ -661,8 +670,10 @@ async function handleLogin(e) {
 
     sessionStorage.setItem('isLoggedIn', 'true');
     sessionStorage.setItem('username', data.username);
+    sessionStorage.setItem('userRole', data.role);
     
     document.getElementById('login-overlay').classList.remove('active');
+    updateSidebarByRole();
     fetchDatabase();
     initRealTimeAlerts();
   } catch (err) {
@@ -674,6 +685,7 @@ async function handleLogin(e) {
 function handleLogout() {
   sessionStorage.removeItem('isLoggedIn');
   sessionStorage.removeItem('username');
+  sessionStorage.removeItem('userRole');
   document.getElementById('login-overlay').classList.add('active');
   // Clear inputs
   document.getElementById('login-username').value = '';
@@ -770,14 +782,14 @@ async function loadSessionReport() {
         if (r.status === 'ontime') {
           ontimeCount++;
           statusBadge = '<span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> ตรงเวลา</span>';
-          timeText = new Date(r.time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' น.';
+          timeText = new Date(r.time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) + ' น.';
           scanMode = r.offline 
             ? '<span class="badge badge-orange"><i class="fa-solid fa-wifi-slash"></i> Offline Sync</span>' 
             : '<span class="badge badge-green"><i class="fa-solid fa-wifi"></i> Online</span>';
         } else if (r.status === 'late') {
           lateCount++;
           statusBadge = '<span class="badge badge-orange"><i class="fa-solid fa-circle-exclamation"></i> มาสาย</span>';
-          timeText = new Date(r.time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' น.';
+          timeText = new Date(r.time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) + ' น.';
           scanMode = r.offline 
             ? '<span class="badge badge-orange"><i class="fa-solid fa-wifi-slash"></i> Offline Sync</span>' 
             : '<span class="badge badge-green"><i class="fa-solid fa-wifi"></i> Online</span>';
@@ -841,11 +853,11 @@ function exportReportToCSV() {
     
     if (r.status === 'ontime') {
       statusText = 'ตรงเวลา';
-      timeText = new Date(r.time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' น.';
+      timeText = new Date(r.time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) + ' น.';
       modeText = r.offline ? 'Offline Sync' : 'Online';
     } else if (r.status === 'late') {
       statusText = 'มาสาย';
-      timeText = new Date(r.time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' น.';
+      timeText = new Date(r.time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) + ' น.';
       modeText = r.offline ? 'Offline Sync' : 'Online';
     }
     
@@ -960,6 +972,380 @@ async function deleteStudent(id) {
 
     renderStudentsList();
     alert('ลบข้อมูลนักศึกษาสำเร็จแล้ว ระบบกำลังทำการอัปเดตโมเดลใบหน้าใหม่');
+  } catch (err) {
+    alert('เกิดข้อผิดพลาด: ' + err.message);
+  }
+}
+
+// Update sidebar and UI based on user role
+function updateSidebarByRole() {
+  const role = sessionStorage.getItem('userRole') || 'teacher';
+  const username = sessionStorage.getItem('username') || '';
+  
+  const usernameEl = document.getElementById('logged-in-username');
+  if (usernameEl) {
+    usernameEl.innerText = username;
+  }
+
+  const tabBackup = document.getElementById('tab-backup');
+  const tabUsers = document.getElementById('tab-users');
+  
+  if (role === 'teacher') {
+    if (tabBackup) tabBackup.style.display = 'none';
+    if (tabUsers) tabUsers.style.display = 'none';
+    const activeContent = document.querySelector('.tab-content.active');
+    if (activeContent && (activeContent.id === 'sect-backup' || activeContent.id === 'sect-users')) {
+      switchTab('dashboard');
+    }
+  } else {
+    if (tabBackup) tabBackup.style.display = 'block';
+    if (tabUsers) tabUsers.style.display = 'block';
+  }
+}
+
+// Populate session select for detailed report
+function populateReportSessionsDropdown() {
+  const select = document.getElementById('report-session-select');
+  if (!select) return;
+  const prevVal = select.value;
+  select.innerHTML = '<option value="">-- เลือกคาบเรียน --</option>';
+  
+  const sorted = [...appState.sessions].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  sorted.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.innerText = `${s.date} | [${s.subjectCode || 'N/A'}] ${s.subjectName || s.className}`;
+    select.appendChild(opt);
+  });
+  
+  if (prevVal && [...select.options].some(o => o.value === prevVal)) {
+    select.value = prevVal;
+  }
+}
+
+// Load and render detailed session report
+async function loadSessionReport() {
+  const select = document.getElementById('report-session-select');
+  if (!select) return;
+  const sessionId = select.value;
+  const panel = document.getElementById('report-details-panel');
+  const tbody = document.getElementById('course-report-table-body');
+  
+  if (!sessionId) {
+    panel.classList.add('hide');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">กรุณาเลือกคาบเรียนจากแผงด้านข้าง</td></tr>';
+    return;
+  }
+  
+  try {
+    const session = appState.sessions.find(s => s.id === sessionId);
+    if (!session) throw new Error('ไม่พบข้อมูลคาบเรียน');
+    
+    // Set metadata on UI
+    document.getElementById('rep-subject').innerText = session.subjectName || session.className;
+    document.getElementById('rep-code').innerText = 'รหัสวิชา: ' + (session.subjectCode || 'N/A');
+    document.getElementById('rep-date').innerText = session.date;
+    document.getElementById('rep-time').innerText = `${session.startTime} - ${session.endTime} น.`;
+    document.getElementById('rep-late').innerText = session.lateAfter ? session.lateAfter + ' น.' : 'ไม่มีการบันทึกสาย';
+    document.getElementById('rep-location').innerText = session.location || 'ไม่ระบุสถานที่';
+    document.getElementById('rep-instructor').innerText = session.instructorName || 'ไม่ระบุผู้สอน';
+
+    // Map attendance check-ins for this session
+    const attendanceMap = new Map();
+    appState.attendance.forEach(a => {
+      if (a.sessionId === sessionId && a.studentId) {
+        attendanceMap.set(a.studentId.trim().toUpperCase(), a);
+      }
+    });
+
+    let ontimeCount = 0;
+    let lateCount = 0;
+    let absentCount = 0;
+
+    const reportData = appState.students.map(student => {
+      const studentKey = student.id.trim().toUpperCase();
+      const record = attendanceMap.get(studentKey);
+      
+      let checkinTime = '---';
+      let statusText = 'ขาดเรียน';
+      let statusClass = 'text-red';
+      let statusVal = 'absent';
+      
+      if (record) {
+        statusVal = record.status;
+        const timeObj = new Date(record.time);
+        checkinTime = timeObj.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) + ' น.';
+        
+        if (record.status === 'late') {
+          statusText = 'สาย';
+          statusClass = 'text-orange';
+          lateCount++;
+        } else {
+          statusText = 'ตรงเวลา';
+          statusClass = 'text-green';
+          ontimeCount++;
+        }
+      } else {
+        absentCount++;
+      }
+      
+      return {
+        id: student.id,
+        name: student.name,
+        checkinTime,
+        statusText,
+        statusClass,
+        statusVal
+      };
+    });
+
+    window.currentSessionReport = {
+      sessionId,
+      session,
+      report: reportData
+    };
+
+    // Render report table
+    renderSessionReportTable(reportData);
+
+    // Update session mini stats
+    document.getElementById('rep-stat-ontime').innerText = ontimeCount;
+    document.getElementById('rep-stat-late').innerText = lateCount;
+    document.getElementById('rep-stat-absent').innerText = absentCount;
+
+    // Calculate Overall Course Attendance Percentage for the subject code of this session
+    const subjectCode = session.subjectCode;
+    let overallPercentage = 0;
+    if (subjectCode) {
+      const courseSessions = appState.sessions.filter(s => s.subjectCode === subjectCode);
+      const totalSessionsCount = courseSessions.length;
+      const totalStudentsCount = appState.students.length;
+      const maxPossiblePresent = totalSessionsCount * totalStudentsCount;
+      
+      let presentCount = 0;
+      const courseSessionIds = new Set(courseSessions.map(s => s.id));
+      appState.attendance.forEach(a => {
+        if (courseSessionIds.has(a.sessionId)) {
+          presentCount++;
+        }
+      });
+      overallPercentage = maxPossiblePresent > 0 ? (presentCount / maxPossiblePresent) * 100 : 0;
+    }
+    
+    const overallPctEl = document.getElementById('course-overall-pct');
+    overallPctEl.innerText = `${overallPercentage.toFixed(2)}%`;
+    
+    const overallBarEl = document.getElementById('course-overall-progress-bar');
+    overallBarEl.style.width = `${overallPercentage}%`;
+    
+    if (overallPercentage >= 80) {
+      overallPctEl.style.color = 'var(--success)';
+      overallBarEl.style.backgroundColor = 'var(--success)';
+    } else if (overallPercentage >= 50) {
+      overallPctEl.style.color = 'var(--warning)';
+      overallBarEl.style.backgroundColor = 'var(--warning)';
+    } else {
+      overallPctEl.style.color = 'var(--danger)';
+      overallBarEl.style.backgroundColor = 'var(--danger)';
+    }
+
+    const btnExport = document.getElementById('btn-export-course-csv');
+    if (btnExport) btnExport.style.display = 'inline-block';
+    panel.classList.remove('hide');
+  } catch (err) {
+    console.error(err);
+    const btnExport = document.getElementById('btn-export-course-csv');
+    if (btnExport) btnExport.style.display = 'none';
+    if (tbody) tbody.innerHTML = `<tr><td colspan="4" class="text-center text-red">ดึงข้อมูลรายงานล้มเหลว: ${err.message}</td></tr>`;
+  }
+}
+
+// Render session report data into HTML table
+function renderSessionReportTable(reportData) {
+  const tbody = document.getElementById('course-report-table-body');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (reportData.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">ไม่มีข้อมูลนักศึกษาในระบบ</td></tr>';
+    return;
+  }
+
+  // Sort by Student ID
+  const sorted = [...reportData].sort((a, b) => a.id.localeCompare(b.id));
+
+  sorted.forEach(r => {
+    const row = document.createElement('tr');
+    row.className = 'course-report-row';
+    row.setAttribute('data-id', r.id.toLowerCase());
+    row.setAttribute('data-name', r.name.toLowerCase());
+
+    row.innerHTML = `
+      <td><strong>${r.id}</strong></td>
+      <td>${r.name}</td>
+      <td>${r.checkinTime}</td>
+      <td class="text-center ${r.statusClass}" style="font-weight: 600;">${r.statusText}</td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+// Client-side search filtering for student session attendance table
+function filterSessionReportStudents() {
+  const query = document.getElementById('course-student-search').value.toLowerCase().trim();
+  const rows = document.querySelectorAll('.course-report-row');
+  
+  rows.forEach(row => {
+    const id = row.getAttribute('data-id');
+    const name = row.getAttribute('data-name');
+    if (id.includes(query) || name.includes(query)) {
+      row.style.display = '';
+    } else {
+      row.style.display = 'none';
+    }
+  });
+}
+
+// Export session report to CSV
+function exportSessionReportToCSV() {
+  if (!window.currentSessionReport || !window.currentSessionReport.report) {
+    alert('กรุณาเลือกคาบเรียนและโหลดข้อมูลก่อนทำการส่งออก');
+    return;
+  }
+  
+  const { session, report } = window.currentSessionReport;
+  
+  let csvContent = "\uFEFF"; // UTF-8 BOM
+  csvContent += `รายงานการเข้าเรียนรายคาบ,,,\n`;
+  csvContent += `วิชา,${session.subjectName || session.className},,\n`;
+  csvContent += `รหัสวิชา,${session.subjectCode || 'N/A'},,\n`;
+  csvContent += `วันที่เรียน,${session.date},,\n`;
+  csvContent += `เวลาเรียน,${session.startTime} - ${session.endTime} น.,,\n`;
+  csvContent += `ผู้สอน,${session.instructorName || 'ไม่ระบุ'},,\n`;
+  csvContent += `\n`;
+  csvContent += `รหัสนักศึกษา,ชื่อ-นามสกุล,เวลาเช็คชื่อ,สถานะ\n`;
+  
+  report.forEach(r => {
+    const id = `"${r.id.replace(/"/g, '""')}"`;
+    const name = `"${r.name.replace(/"/g, '""')}"`;
+    
+    csvContent += `${id},${name},${r.checkinTime},${r.statusText}\n`;
+  });
+  
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  
+  const sanitizedCode = (session.subjectCode || 'Session').replace(/[^a-zA-Z0-9-]/g, '_');
+  link.setAttribute("download", `Session_Report_${sanitizedCode}_${session.date}.csv`);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+// Render list of system users (Admin only)
+function renderUsersTable() {
+  const tbody = document.getElementById('users-table-body');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  const users = appState.users || [];
+  if (users.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted">ไม่พบข้อมูลผู้ใช้ในระบบ</td></tr>';
+    return;
+  }
+
+  const currentLoggedInUser = sessionStorage.getItem('username');
+
+  // Sort: admin first, then alphabetical
+  const sorted = [...users].sort((a, b) => {
+    if (a.username.toLowerCase() === 'admin') return -1;
+    if (b.username.toLowerCase() === 'admin') return 1;
+    return a.username.localeCompare(b.username);
+  });
+
+  sorted.forEach(u => {
+    const row = document.createElement('tr');
+    
+    // Disable delete for default 'admin' or currently logged in user
+    const cannotDelete = u.username.toLowerCase() === 'admin' || u.username === currentLoggedInUser;
+    
+    const deleteBtn = cannotDelete
+      ? `<button class="btn btn-secondary btn-xs" disabled style="opacity: 0.5; cursor: not-allowed;" title="ไม่สามารถลบผู้ใช้หลักหรือบัญชีที่กำลังใช้งานอยู่ได้"><i class="fa-solid fa-ban"></i> ลบไม่ได้</button>`
+      : `<button class="btn btn-danger-outline btn-xs" onclick="handleDeleteUser('${u.username}')"><i class="fa-solid fa-user-xmark"></i> ลบผู้ใช้</button>`;
+
+    row.innerHTML = `
+      <td><strong>${u.username}</strong></td>
+      <td class="text-center">${deleteBtn}</td>
+    `;
+    
+    tbody.appendChild(row);
+  });
+}
+
+// Add User handler (Admin only)
+async function handleAddUser(e) {
+  e.preventDefault();
+  const usernameInput = document.getElementById('new-username');
+  const passwordInput = document.getElementById('new-password');
+  
+  const username = usernameInput.value.trim();
+  const password = passwordInput.value;
+  const role = 'teacher'; // Auto-assign teacher role
+
+  if (!username || !password) {
+    alert('กรุณากรอกข้อมูลให้ครบถ้วน');
+    return;
+  }
+
+  // Username validation (English letters, numbers, underscores only)
+  const usernameRegex = /^[a-zA-Z0-9_]+$/;
+  if (!usernameRegex.test(username)) {
+    alert('ชื่อผู้ใช้งานต้องเป็นภาษาอังกฤษ ตัวเลข หรือเครื่องหมาย underscore (_) เท่านั้น');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, role })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'เพิ่มบัญชีไม่สำเร็จ');
+    }
+
+    usernameInput.value = '';
+    passwordInput.value = '';
+
+    alert(`เพิ่มอาจารย์ "${username}" เรียบร้อยแล้ว!`);
+    fetchDatabase();
+  } catch (err) {
+    alert('เกิดข้อผิดพลาด: ' + err.message);
+  }
+}
+
+// Delete User handler (Admin only)
+async function handleDeleteUser(username) {
+  if (!confirm(`คุณแน่ใจหรือไม่ว่าต้องการลบผู้ใช้งาน "${username}" ?`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/users/${username}`, {
+      method: 'DELETE'
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'ลบผู้ใช้ไม่สำเร็จ');
+    }
+
+    alert(`ลบผู้ใช้ "${username}" สำเร็จ`);
+    fetchDatabase();
   } catch (err) {
     alert('เกิดข้อผิดพลาด: ' + err.message);
   }
