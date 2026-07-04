@@ -157,6 +157,11 @@ class Pi5PortraitDash(tk.Tk):
         self.current_session_id = None
         self.logged_checkins = set()
 
+        # ตัวแปรสำหรับเก็บข้อมูลสถานะและประวัติคาบล่าสุดเมื่อออฟไลน์
+        self.last_active_session = None
+        self.last_attendance_records = []
+        self.is_server_offline = False
+
         self.init_core_paths() 
         self.init_ui() 
         
@@ -204,9 +209,63 @@ class Pi5PortraitDash(tk.Tk):
         self.v_label = tk.Label(self.v_frame, bg="#000") 
         self.v_label.pack(fill=tk.BOTH, expand=True) 
 
-        # 2. Log Area (Under Camera)
-        self.log = scrolledtext.ScrolledText(self, bg="#050505", fg="#00ff00", font=("Monospace", 9), bd=0, height=8) 
-        self.log.grid(row=2, column=0, sticky="nsew", padx=15, pady=5)
+        # 2. Log and Attendance Container (Under Camera)
+        self.log_container = tk.Frame(self, bg="#050505")
+        self.log_container.grid(row=2, column=0, sticky="nsew", padx=15, pady=5)
+        self.log_container.columnconfigure(0, weight=6) # 60% width for attendance list
+        self.log_container.columnconfigure(1, weight=4) # 40% width for system log
+        self.log_container.rowconfigure(0, weight=1)
+
+        # 2a. Attendance List Card (Left)
+        self.attendance_frame = tk.Frame(self.log_container, bg="#161b22", highlightthickness=1, highlightbackground="#30363d")
+        self.attendance_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 5), pady=5)
+        
+        self.lbl_attendance_title = tk.Label(
+            self.attendance_frame, 
+            text="📋 รายชื่อที่เช็คชื่อเข้าเรียนในวิชานี้ (0 คน)", 
+            font=("Segoe UI", 10, "bold"), 
+            fg="#ffcc00", 
+            bg="#161b22"
+        )
+        self.lbl_attendance_title.pack(anchor="w", padx=10, pady=(5, 2))
+        
+        self.attendance_list = scrolledtext.ScrolledText(
+            self.attendance_frame, 
+            bg="#0d1117", 
+            fg="#cbd5e1", 
+            font=("Consolas", 9), 
+            bd=0, 
+            height=8
+        )
+        self.attendance_list.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
+        self.attendance_list.tag_config("header", foreground="#ffcc00", font=("Consolas", 9, "bold"))
+        self.attendance_list.tag_config("ontime", foreground="#00ff00")
+        self.attendance_list.tag_config("late", foreground="#ffa500")
+        self.attendance_list.tag_config("offline", foreground="#00ffff")
+        self.attendance_list.config(state=tk.DISABLED)
+
+        # 2b. System Event Log Card (Right)
+        self.system_frame = tk.Frame(self.log_container, bg="#161b22", highlightthickness=1, highlightbackground="#30363d")
+        self.system_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 0), pady=5)
+        
+        lbl_sys_title = tk.Label(
+            self.system_frame, 
+            text="💻 บันทึกเหตุการณ์ระบบ", 
+            font=("Segoe UI", 10, "bold"), 
+            fg="#58a6ff", 
+            bg="#161b22"
+        )
+        lbl_sys_title.pack(anchor="w", padx=10, pady=(5, 2))
+        
+        self.log = scrolledtext.ScrolledText(
+            self.system_frame, 
+            bg="#0d1117", 
+            fg="#00ff00", 
+            font=("Monospace", 8), 
+            bd=0, 
+            height=8
+        )
+        self.log.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
 
         # 3. Control Panel (Bottom)
         self.p_frame = tk.Frame(self, bg="#0b0f19") 
@@ -265,61 +324,211 @@ class Pi5PortraitDash(tk.Tk):
                                 active_sess = s
                                 break
                         
-                        self.after(0, self.update_session_ui, active_sess, attendance)
+                        self.after(0, self.update_session_ui, active_sess, attendance, False)
                 except Exception as e:
-                    self.after(0, self.update_session_ui, None, [])
+                    self.after(0, self.update_session_ui, None, [], True)
                 
                 time.sleep(5)
                 
         threading.Thread(target=_poll, daemon=True).start()
 
-    def update_session_ui(self, active_sess, attendance):
-        if active_sess:
-            code = active_sess.get("subjectCode", "-")
-            name = active_sess.get("subjectName", "-")
-            start = active_sess.get("startTime", "-")
-            end = active_sess.get("endTime", "-")
+    def update_banner(self, text, is_offline):
+        bg_color = "#331a00" if is_offline else "#1a1a1a"
+        fg_color = "#ff9900" if is_offline else "#ffcc00"
+        
+        self.top_banner.config(bg=bg_color)
+        self.lbl_session_info.config(bg=bg_color, fg=fg_color, text=text)
+        self.lbl_clock.config(bg=bg_color)
+
+    def get_offline_records(self):
+        offline_file = os.path.join(self.script_dir, "offline_attendance.json")
+        records = []
+        if os.path.exists(offline_file):
+            with self.offline_lock:
+                try:
+                    with open(offline_file, 'r', encoding='utf-8') as f:
+                        records = json.load(f)
+                except:
+                    pass
+        return records
+
+    def trigger_local_refresh(self):
+        active_sess = getattr(self, 'last_active_session', None)
+        attendance = getattr(self, 'last_attendance_records', [])
+        is_offline = getattr(self, 'is_server_offline', False)
+        self.update_session_ui(active_sess, attendance, is_offline)
+
+    def update_session_ui(self, active_sess, attendance, is_server_offline=False):
+        if is_server_offline:
+            # Server is offline. Retain last known session and attendance
+            active_sess = getattr(self, 'last_active_session', None)
+            attendance = getattr(self, 'last_attendance_records', [])
+            self.is_server_offline = True
             
-            # แสดงรายวิชาที่บนสุดของจอ
-            self.lbl_session_info.config(text=f"วิชาเรียน: {code} - {name}   |   เวลาเรียน: {start} - {end} น.")
+            if active_sess:
+                code = active_sess.get("subjectCode", "-")
+                name = active_sess.get("subjectName", "-")
+                start = active_sess.get("startTime", "-")
+                end = active_sess.get("endTime", "-")
+                banner_text = f"⚠️ [ออฟไลน์] วิชาเรียน: {code} - {name}   |   เวลาเรียน: {start} - {end} น."
+            else:
+                banner_text = "⚠️ [ออฟไลน์] ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ และไม่มีประวัติคาบเรียนเรียนแคชไว้"
+                
+            self.update_banner(banner_text, is_offline=True)
+        else:
+            # Server is online
+            self.last_active_session = active_sess
+            self.last_attendance_records = attendance
+            self.is_server_offline = False
             
-            # ตรวจสอบว่าคาบเรียนเปลี่ยนหรือไม่
-            sess_id = active_sess.get("id")
-            if self.current_session_id != sess_id:
-                self.current_session_id = sess_id
-                self.logged_checkins.clear()
-                self.add_log(f"📝 เริ่มต้นสแกนเช็คชื่อคาบใหม่: {code} - {name}")
-            
-            # ดึงประวัติเข้าเรียนเฉพาะคาบนี้
+            if active_sess:
+                code = active_sess.get("subjectCode", "-")
+                name = active_sess.get("subjectName", "-")
+                start = active_sess.get("startTime", "-")
+                end = active_sess.get("endTime", "-")
+                banner_text = f"วิชาเรียน: {code} - {name}   |   เวลาเรียน: {start} - {end} น."
+                
+                # Check for session change
+                sess_id = active_sess.get("id")
+                if self.current_session_id != sess_id:
+                    self.current_session_id = sess_id
+                    self.logged_checkins.clear()
+                    self.add_log(f"📝 เริ่มต้นสแกนเช็คชื่อคาบใหม่: {code} - {name}")
+                
+                self.update_banner(banner_text, is_offline=False)
+            else:
+                self.update_banner("วิชา: ไม่มีวิชาเรียนที่กำลังเปิดเช็คชื่อ", is_offline=False)
+                if self.current_session_id is not None:
+                    self.current_session_id = None
+                    self.logged_checkins.clear()
+                    self.add_log("📝 คาบเรียนปัจจุบันถูกปิดลงแล้ว")
+
+        # Now update the list box (it takes active_sess, attendance, and local offline records)
+        sess_id = active_sess.get("id") if active_sess else None
+        
+        # Filter attendance to current session
+        sess_attendance = []
+        if sess_id:
             sess_attendance = [a for a in attendance if a.get("sessionId") == sess_id]
-            # เรียงลำดับเวลาเช็คชื่อจากเก่าไปใหม่
-            sess_attendance.sort(key=lambda x: x.get("time", ""))
             
-            # พิมพ์รายชื่อลงในช่อง Log ตามลำดับการเข้าเรียนเรียลไทม์
+        offline_records = self.get_offline_records()
+        self.display_attendance_list(active_sess, sess_attendance, offline_records)
+
+    def display_attendance_list(self, active_sess, sess_attendance, offline_records):
+        # Format helper
+        def format_time_str(t_str):
+            try:
+                if 'T' in t_str:
+                    t_parts = t_str.split('T')[1].split('.')[0]
+                    return t_parts # HH:MM:SS
+                return t_str[:19]
+            except:
+                return t_str
+
+        # Log new check-ins to the system log (once per check-in)
+        if active_sess:
+            sess_attendance.sort(key=lambda x: x.get("time", ""))
             for a in sess_attendance:
                 std_id = a.get("studentId", "-")
                 std_name = a.get("studentName", "-")
                 t_str = a.get("time", "")
-                
                 key = f"{std_id}_{t_str}"
                 
                 if key not in self.logged_checkins:
                     self.logged_checkins.add(key)
                     status = a.get("status", "ontime")
                     status_thai = "ตรงเวลา" if status == "ontime" else "สาย"
-                    try:
-                        t_parts = t_str.split('T')[1].split('.')[0]
-                        t_disp = t_parts
-                    except:
-                        t_disp = t_str[:19]
-                    
+                    t_disp = format_time_str(t_str)
                     self.add_log(f"✅ ลำดับที่ {len(self.logged_checkins)}: {std_id} - {std_name} ({status_thai}) @ {t_disp}")
-        else:
-            self.lbl_session_info.config(text="วิชา: ไม่มีวิชาเรียนที่กำลังเปิดเช็คชื่อ")
-            if self.current_session_id is not None:
-                self.current_session_id = None
-                self.logged_checkins.clear()
-                self.add_log("📝 คาบเรียนปัจจุบันถูกปิดลงแล้ว")
+                    
+        # Build merged lists for display
+        online_student_ids = {a.get("studentId").strip().upper() for a in sess_attendance if a.get("studentId")}
+        
+        merged_attendance = []
+        
+        # Add online check-ins
+        for a in sess_attendance:
+            std_id = a.get("studentId", "-")
+            std_name = a.get("studentName", "-")
+            time_disp = format_time_str(a.get("time", ""))
+            status = a.get("status", "ontime")
+            status_thai = "ตรงเวลา" if status == "ontime" else "สาย"
+            
+            merged_attendance.append({
+                "id": std_id,
+                "name": std_name,
+                "time": time_disp,
+                "status": status_thai,
+                "is_offline": False,
+                "sort_time": a.get("time", "")
+            })
+            
+        # Add unsynced offline check-ins
+        for rec in offline_records:
+            name_id = rec.get("name_id", "")
+            hyphen_idx = name_id.find('-')
+            if hyphen_idx != -1:
+                std_id = name_id[:hyphen_idx].strip()
+                std_name = name_id[hyphen_idx+1:].strip()
+            else:
+                std_id = name_id.strip()
+                std_name = ""
+                
+            if std_id.upper() not in online_student_ids:
+                time_disp = format_time_str(rec.get("time", ""))
+                status_thai = "ตรงเวลา"
+                if active_sess and active_sess.get("lateAfter"):
+                    try:
+                        rec_time_str = time_disp[:5] # HH:MM
+                        if rec_time_str > active_sess.get("lateAfter"):
+                            status_thai = "สาย"
+                    except:
+                        pass
+                
+                merged_attendance.append({
+                    "id": std_id,
+                    "name": std_name,
+                    "time": time_disp,
+                    "status": status_thai,
+                    "is_offline": True,
+                    "sort_time": rec.get("time", "")
+                })
+                
+        # Sort chronologically
+        merged_attendance.sort(key=lambda x: x["sort_time"])
+        
+        # Display in Text widget
+        self.lbl_attendance_title.config(text=f"📋 รายชื่อที่เช็คชื่อเข้าเรียนในวิชานี้ ({len(merged_attendance)} คน)")
+        
+        self.attendance_list.config(state=tk.NORMAL)
+        self.attendance_list.delete("1.0", tk.END)
+        
+        # Header
+        header = f"{'ลำดับ':<5}{'รหัสนักศึกษา':<13}{'ชื่อ-นามสกุล':<22}{'เวลา':<10}{'สถานะ':<12}\n"
+        separator = "-" * 65 + "\n"
+        self.attendance_list.insert(tk.END, header, "header")
+        self.attendance_list.insert(tk.END, separator)
+        
+        for idx, item in enumerate(merged_attendance, 1):
+            lbl = f"{idx}."
+            std_id = item["id"]
+            name = item["name"]
+            if len(name) > 20:
+                name = name[:17] + "..."
+            time_val = item["time"]
+            
+            self.attendance_list.insert(tk.END, f"{lbl:<5}{std_id:<13}{name:<22}{time_val:<10}")
+            
+            if item["is_offline"]:
+                status_str = f"{item['status']} (ออฟไลน์ 💾)\n"
+                self.attendance_list.insert(tk.END, status_str, "offline")
+            else:
+                status_str = f"{item['status']}\n"
+                tag = "late" if item["status"] == "สาย" else "ontime"
+                self.attendance_list.insert(tk.END, status_str, tag)
+                
+        self.attendance_list.see(tk.END)
+        self.attendance_list.config(state=tk.DISABLED)
 
     def update_clock(self):
         now_str = datetime.now().strftime("%H:%M:%S")
@@ -451,6 +660,48 @@ class Pi5PortraitDash(tk.Tk):
 
                 img = PILImage.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)) 
 
+                # Draw status display text overlay using PIL (supports Thai fonts)
+                if not is_reg and self.status_display_text and time.time() < self.status_display_expiry:
+                    draw = ImageDraw.Draw(img)
+                    w_img, h_img = img.size
+                    
+                    # Try to load a Thai font, otherwise fallback to default
+                    font = None
+                    font_paths = [
+                        "arial.ttf",                  # Windows default
+                        "tahoma.ttf",                 # Windows default (good for Thai)
+                        "/usr/share/fonts/truetype/thai/Loma.ttf", # Pi default
+                        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf" # Pi default
+                    ]
+                    for path in font_paths:
+                        try:
+                            font = ImageFont.truetype(path, 18)
+                            break
+                        except:
+                            pass
+                    if not font:
+                        font = ImageFont.load_default()
+                        
+                    # Calculate text box width and height
+                    try:
+                        bbox = draw.textbbox((0, 0), self.status_display_text, font=font)
+                        text_w = bbox[2] - bbox[0]
+                        text_h = bbox[3] - bbox[1]
+                    except AttributeError:
+                        text_w, text_h = draw.textsize(self.status_display_text, font=font)
+                        
+                    # Center the text
+                    text_x = max(10, (w_img - text_w) // 2)
+                    text_y = h_img - 35
+                    
+                    # Draw a semi-transparent black background rectangle for the status banner
+                    draw.rectangle([0, h_img - 50, w_img, h_img], fill=(0, 0, 0))
+                    
+                    # Convert BGR status display color to RGB
+                    color_rgb = (self.status_display_color[2], self.status_display_color[1], self.status_display_color[0])
+                    
+                    # Draw the text
+                    draw.text((text_x, text_y), self.status_display_text, font=font, fill=color_rgb)
 
                 # ดึงขนาดของวิดเจ็ตเฟรมกล้องจริงแบบไดนามิก เพื่อให้ภาพขยายเต็มพื้นที่จอโดยอัตโนมัติแบบรักษาสัดส่วน (Aspect Ratio)
                 w = self.v_label.winfo_width()
@@ -492,6 +743,7 @@ class Pi5PortraitDash(tk.Tk):
                 self.add_log(f"💾 ออฟไลน์: บันทึกประวัติของ {name} ลงเครื่องสำเร็จ (รอเน็ตเชื่อมต่อเพื่อซิงค์)")
             except Exception as e:
                 self.add_log(f"❌ เกิดข้อผิดพลาดในการบันทึกออฟไลน์ลงเครื่อง: {e}")
+        self.after(0, self.trigger_local_refresh)
 
     def sync_offline_loop(self):
         offline_file = os.path.join(self.script_dir, "offline_attendance.json")
@@ -536,6 +788,7 @@ class Pi5PortraitDash(tk.Tk):
                     self.add_log(f"🔄 Sync: อัปโหลดประวัติสแกนออฟไลน์ {len(records)} รายการขึ้นเว็บสำเร็จ!")
                     try: os.remove(temp_sync_file)
                     except: pass
+                    self.after(0, self.trigger_local_refresh)
                 else:
                     self.merge_temp_file_back(temp_sync_file, offline_file)
             except requests.exceptions.RequestException:
@@ -638,6 +891,9 @@ class Pi5PortraitDash(tk.Tk):
                 self.status_display_text = f"บันทึกออฟไลน์แล้ว: {std_name} (รอเชื่อมเน็ต)"
                 self.status_display_color = (0, 255, 255) # Yellow in BGR
                 self.status_display_expiry = time.time() + 4.0
+                
+                # กำหนดสถานะออฟไลน์ทันทีเพื่ออัปเดต UI หน้าจอ
+                self.is_server_offline = True
                 
                 # บันทึกออฟไลน์ลงเครื่อง
                 self.save_offline_attendance(name)
