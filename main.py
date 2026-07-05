@@ -95,7 +95,7 @@ def ai_worker(frame_q, result_q, ctrl_ev, reload_ev, faces_dir, cache_path, rota
         if not frame_q.full(): 
             frame_q.put(frame) 
 
-        small_frame = cv2.resize(frame, (0, 0), fx=0.2, fy=0.2) 
+        small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25) 
         rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB) 
          
         locs = face_recognition.face_locations(rgb_small, model="hog") 
@@ -235,7 +235,8 @@ class Pi5PortraitDash(tk.Tk):
             fg="#cbd5e1", 
             font=("Consolas", 9), 
             bd=0, 
-            height=8
+            height=8,
+            wrap=tk.NONE
         )
         self.attendance_list.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
         self.attendance_list.tag_config("header", foreground="#ffcc00", font=("Consolas", 9, "bold"))
@@ -386,16 +387,30 @@ class Pi5PortraitDash(tk.Tk):
                 name = active_sess.get("subjectName", "-")
                 start = active_sess.get("startTime", "-")
                 end = active_sess.get("endTime", "-")
-                banner_text = f"วิชาเรียน: {code} - {name}   |   เวลาเรียน: {start} - {end} น."
+                date_str = active_sess.get("date", "")
                 
-                # Check for session change
-                sess_id = active_sess.get("id")
-                if self.current_session_id != sess_id:
-                    self.current_session_id = sess_id
-                    self.logged_checkins.clear()
-                    self.add_log(f"📝 เริ่มต้นสแกนเช็คชื่อคาบใหม่: {code} - {name}")
+                # Get current local date and time
+                now = datetime.now()
+                today_str = now.strftime("%Y-%m-%d")
+                current_time_str = now.strftime("%H:%M")
                 
-                self.update_banner(banner_text, is_offline=False)
+                if date_str != today_str or current_time_str < start or current_time_str > end:
+                    self.update_banner("วิชา: ไม่มีวิชาเรียนที่กำลังเปิดเช็คชื่อ", is_offline=False)
+                    if self.current_session_id is not None:
+                        self.current_session_id = None
+                        self.logged_checkins.clear()
+                        self.add_log("📝 คาบเรียนปัจจุบันถูกปิดลงแล้ว")
+                else:
+                    banner_text = f"วิชาเรียน: {code} - {name}   |   เวลาเรียน: {start} - {end} น."
+                    
+                    # Check for session change
+                    sess_id = active_sess.get("id")
+                    if self.current_session_id != sess_id:
+                        self.current_session_id = sess_id
+                        self.logged_checkins.clear()
+                        self.add_log(f"📝 เริ่มต้นสแกนเช็คชื่อคาบใหม่: {code} - {name}")
+                    
+                    self.update_banner(banner_text, is_offline=False)
             else:
                 self.update_banner("วิชา: ไม่มีวิชาเรียนที่กำลังเปิดเช็คชื่อ", is_offline=False)
                 if self.current_session_id is not None:
@@ -504,8 +519,8 @@ class Pi5PortraitDash(tk.Tk):
         self.attendance_list.delete("1.0", tk.END)
         
         # Header
-        header = f"{'ลำดับ':<5}{'รหัสนักศึกษา':<13}{'ชื่อ-นามสกุล':<22}{'เวลา':<10}{'สถานะ':<12}\n"
-        separator = "-" * 65 + "\n"
+        header = f"{'ลำดับ':<6}{'รหัสนักศึกษา':<15}{'ชื่อ-นามสกุล':<20}{'เวลา':<9}{'สถานะ':<10}\n"
+        separator = "-" * 60 + "\n"
         self.attendance_list.insert(tk.END, header, "header")
         self.attendance_list.insert(tk.END, separator)
         
@@ -513,11 +528,11 @@ class Pi5PortraitDash(tk.Tk):
             lbl = f"{idx}."
             std_id = item["id"]
             name = item["name"]
-            if len(name) > 20:
-                name = name[:17] + "..."
+            if len(name) > 16:
+                name = name[:13] + "..."
             time_val = item["time"]
             
-            self.attendance_list.insert(tk.END, f"{lbl:<5}{std_id:<13}{name:<22}{time_val:<10}")
+            self.attendance_list.insert(tk.END, f"{lbl:<6}{std_id:<15}{name:<20}{time_val:<9}")
             
             if item["is_offline"]:
                 status_str = f"{item['status']} (ออฟไลน์ 💾)\n"
@@ -651,7 +666,7 @@ class Pi5PortraitDash(tk.Tk):
                 frame = raw.copy()
                 if not is_reg:
                     for (t, r, b, l), name in zip(self.last_locs, self.last_names): 
-                        t, r, b, l = t*5, r*5, b*5, l*5 
+                        t, r, b, l = t*4, r*4, b*4, l*4 
                         color = (0, 0, 255) if name == "Unknown" else (0, 255, 0) # แดงถ้าไม่รู้จัก, เขียวถ้ารู้จัก
                         cv2.rectangle(frame, (l, t), (r, b), color, 2) 
                         cv2.putText(frame, name, (l, t-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1) 
@@ -659,49 +674,6 @@ class Pi5PortraitDash(tk.Tk):
                     cv2.putText(frame, "REGISTRATION MODE", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 204, 255), 2)
 
                 img = PILImage.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)) 
-
-                # Draw status display text overlay using PIL (supports Thai fonts)
-                if not is_reg and self.status_display_text and time.time() < self.status_display_expiry:
-                    draw = ImageDraw.Draw(img)
-                    w_img, h_img = img.size
-                    
-                    # Try to load a Thai font, otherwise fallback to default
-                    font = None
-                    font_paths = [
-                        "arial.ttf",                  # Windows default
-                        "tahoma.ttf",                 # Windows default (good for Thai)
-                        "/usr/share/fonts/truetype/thai/Loma.ttf", # Pi default
-                        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf" # Pi default
-                    ]
-                    for path in font_paths:
-                        try:
-                            font = ImageFont.truetype(path, 18)
-                            break
-                        except:
-                            pass
-                    if not font:
-                        font = ImageFont.load_default()
-                        
-                    # Calculate text box width and height
-                    try:
-                        bbox = draw.textbbox((0, 0), self.status_display_text, font=font)
-                        text_w = bbox[2] - bbox[0]
-                        text_h = bbox[3] - bbox[1]
-                    except AttributeError:
-                        text_w, text_h = draw.textsize(self.status_display_text, font=font)
-                        
-                    # Center the text
-                    text_x = max(10, (w_img - text_w) // 2)
-                    text_y = h_img - 35
-                    
-                    # Draw a semi-transparent black background rectangle for the status banner
-                    draw.rectangle([0, h_img - 50, w_img, h_img], fill=(0, 0, 0))
-                    
-                    # Convert BGR status display color to RGB
-                    color_rgb = (self.status_display_color[2], self.status_display_color[1], self.status_display_color[0])
-                    
-                    # Draw the text
-                    draw.text((text_x, text_y), self.status_display_text, font=font, fill=color_rgb)
 
                 # ดึงขนาดของวิดเจ็ตเฟรมกล้องจริงแบบไดนามิก เพื่อให้ภาพขยายเต็มพื้นที่จอโดยอัตโนมัติแบบรักษาสัดส่วน (Aspect Ratio)
                 w = self.v_label.winfo_width()
@@ -859,16 +831,16 @@ class Pi5PortraitDash(tk.Tk):
                         
                         if attendance_status == "late":
                             self.add_log(f"✅ เช็คชื่อสำเร็จ (สาย): {std_name}")
-                            self.status_display_text = f"เช็คชื่อสำเร็จ (สาย): {std_id} - {std_name} @ {checkin_time}"
+                            self.status_display_text = f"เช็คชื่อสำเร็จ (สาย) @ {checkin_time}"
                             self.status_display_color = (0, 165, 255) # Orange in BGR
                         else:
                             self.add_log(f"✅ เช็คชื่อสำเร็จ (ตรงเวลา): {std_name}")
-                            self.status_display_text = f"เช็คชื่อสำเร็จ (ตรงเวลา): {std_id} - {std_name} @ {checkin_time}"
+                            self.status_display_text = f"เช็คชื่อสำเร็จ (ตรงเวลา) @ {checkin_time}"
                             self.status_display_color = (0, 255, 0) # Green in BGR
                         self.status_display_expiry = time.time() + 4.0
                     elif status == "already_checked_in":
                         self.add_log(f"⚠️ เช็คชื่อไปแล้ว: {std_name}")
-                        self.status_display_text = f"เช็คชื่อซ้ำ: {std_name} เช็คชื่อไปแล้ว"
+                        self.status_display_text = "เช็คชื่อซ้ำ: เช็คชื่อเข้าเรียนไปแล้ว"
                         self.status_display_color = (0, 165, 255) # Orange/Yellow in BGR
                         self.status_display_expiry = time.time() + 4.0
                     elif status == "no_session":
@@ -888,7 +860,7 @@ class Pi5PortraitDash(tk.Tk):
                 std_name = parts[1] if len(parts) >= 2 else name
                 
                 # แสดงข้อความออฟไลน์บนหน้าจอ
-                self.status_display_text = f"บันทึกออฟไลน์แล้ว: {std_name} (รอเชื่อมเน็ต)"
+                self.status_display_text = "บันทึกออฟไลน์แล้ว (รอเชื่อมต่อเซิร์ฟเวอร์)"
                 self.status_display_color = (0, 255, 255) # Yellow in BGR
                 self.status_display_expiry = time.time() + 4.0
                 

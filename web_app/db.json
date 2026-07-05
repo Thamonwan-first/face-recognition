@@ -79,20 +79,6 @@
       "instructorName": "fvdf",
       "active": false,
       "createdAt": "2026-07-04T11:01:47.583Z"
-    },
-    {
-      "id": "session_1783163552804",
-      "subjectCode": "dcd",
-      "subjectName": "cdc",
-      "className": "dcd - cdc",
-      "date": "2569-07-16",
-      "startTime": "18:12",
-      "endTime": "18:30",
-      "lateAfter": "18:13",
-      "location": "dcscd",
-      "instructorName": "dcsd",
-      "active": true,
-      "createdAt": "2026-07-04T11:12:32.804Z"
     }
   ],
   "attendance": [],

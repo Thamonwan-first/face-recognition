@@ -120,11 +120,24 @@ function updateUI() {
   const pulseText = document.getElementById('status-text');
 
   if (activeSession) {
-    banner.className = 'current-session-banner active-session';
-    banner.innerHTML = `<i class="fa-solid fa-circle-play text-green spinner"></i> <span>วิชา: <strong>[${activeSession.subjectCode || 'N/A'}] ${activeSession.subjectName || activeSession.className}</strong> (${activeSession.startTime} - ${activeSession.endTime})</span>`;
-    
-    pulse.className = 'pulse-dot green';
-    pulseText.innerText = 'เปิดเช็คชื่อ (มีเซสชัน)';
+    const now = new Date();
+    const offset = now.getTimezoneOffset();
+    const localNow = new Date(now.getTime() - (offset * 60 * 1000));
+    const localTodayStr = localNow.toISOString().split('T')[0];
+    const currentTimeStr = localNow.toISOString().split('T')[1].substring(0, 5);
+
+    if (activeSession.date !== localTodayStr || currentTimeStr < activeSession.startTime || currentTimeStr > activeSession.endTime) {
+      banner.className = 'current-session-banner';
+      banner.innerHTML = `<i class="fa-regular fa-bell pulse-bell"></i> <span>ไม่มีคาบเรียนที่กำลังเปิดเช็คชื่อ</span>`;
+      
+      pulse.className = 'pulse-dot orange';
+      pulseText.innerText = 'ระบบสแตนด์บาย';
+    } else {
+      banner.className = 'current-session-banner active-session';
+      banner.innerHTML = `<i class="fa-solid fa-circle-play text-green spinner"></i> <span>วิชา: <strong>[${activeSession.subjectCode || 'N/A'}] ${activeSession.subjectName || activeSession.className}</strong> (${activeSession.startTime} - ${activeSession.endTime})</span>`;
+      pulse.className = 'pulse-dot green';
+      pulseText.innerText = 'เปิดเช็คชื่อ (มีเซสชัน)';
+    }
   } else {
     banner.className = 'current-session-banner';
     banner.innerHTML = `<i class="fa-regular fa-bell pulse-bell"></i> <span>ไม่มีคาบเรียนที่กำลังเปิดเช็คชื่อ</span>`;
