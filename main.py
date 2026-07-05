@@ -106,7 +106,7 @@ def ai_worker(frame_q, result_q, ctrl_ev, reload_ev, faces_dir, cache_path, rota
             name = "Unknown" 
             if len(known_encs) > 0: 
                 dist = np.linalg.norm(known_encs - e, axis=1) 
-                if np.min(dist) < 0.45: 
+                if np.min(dist) < 0.40: 
                     name = known_names[np.argmin(dist)] 
             names.append(name) 
 
