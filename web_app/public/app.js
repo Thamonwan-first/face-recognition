@@ -235,6 +235,9 @@ function renderSessionsList() {
         <button class="btn btn-secondary-outline btn-sm" onclick="toggleSession('${s.id}')">
           <i class="${activeIcon}"></i> ${s.active ? 'ปิดเช็คชื่อ' : 'เปิดเช็คชื่อ'}
         </button>
+        <button class="btn btn-secondary-outline btn-sm" onclick="editSession('${s.id}')">
+          <i class="fa-solid fa-pen-to-square"></i> แก้ไข
+        </button>
         <button class="btn btn-danger-outline btn-sm" onclick="deleteSession('${s.id}')">
           <i class="fa-solid fa-trash"></i> ลบ
         </button>
@@ -298,7 +301,10 @@ function searchStudents() {
   });
 }
 
-// Create Session
+// Variable to store editing session ID
+let editingSessionId = null;
+
+// Create or Update Session
 async function createSession(e) {
   e.preventDefault();
   const subjectCode = document.getElementById('sess-subjectCode').value.trim();
@@ -311,12 +317,23 @@ async function createSession(e) {
   const endTime = document.getElementById('sess-end').value;
 
   try {
-    const res = await fetch('/api/sessions', {
-      method: 'POST',
+    let url = '/api/sessions';
+    let method = 'POST';
+    
+    if (editingSessionId) {
+      url = `/api/sessions/${editingSessionId}`;
+      method = 'PUT';
+    }
+
+    const res = await fetch(url, {
+      method: method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ subjectCode, subjectName, date, startTime, endTime, lateAfter, location, instructorName })
     });
-    if (!res.ok) throw new Error('Create session failed');
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || (editingSessionId ? 'แก้ไขข้อมูลคาบเรียนล้มเหลว' : 'สร้างคาบเรียนล้มเหลว'));
+    }
     
     // Reset Form
     document.getElementById('sess-subjectCode').value = '';
@@ -327,11 +344,68 @@ async function createSession(e) {
     document.getElementById('sess-end').value = '';
     document.getElementById('sess-lateAfter').value = '';
     
+    if (editingSessionId) {
+      cancelEditSession();
+      alert('แก้ไขข้อมูลคาบเรียนเสร็จสมบูรณ์!');
+    } else {
+      alert('บันทึกคาบเรียนและเปิดสแกนใบหน้าสำเร็จ!');
+    }
     fetchDatabase();
-    alert('บันทึกคาบเรียนและเปิดสแกนใบหน้าสำเร็จ!');
   } catch (err) {
     alert('เกิดข้อผิดพลาด: ' + err.message);
   }
+}
+
+// Edit Session mode
+function editSession(id) {
+  const session = appState.sessions.find(s => s.id === id);
+  if (!session) return;
+  
+  editingSessionId = id;
+  
+  // Fill inputs
+  document.getElementById('sess-subjectCode').value = session.subjectCode || '';
+  document.getElementById('sess-subjectName').value = session.subjectName || '';
+  document.getElementById('sess-location').value = session.location || '';
+  document.getElementById('sess-instructorName').value = session.instructorName || '';
+  document.getElementById('sess-date').value = session.date || '';
+  document.getElementById('sess-lateAfter').value = session.lateAfter || '';
+  document.getElementById('sess-start').value = session.startTime || '';
+  document.getElementById('sess-end').value = session.endTime || '';
+  
+  // Update UI Card Header
+  const formCard = document.querySelector('#sect-sessions .card:first-child');
+  formCard.querySelector('h2').innerHTML = '<i class="fa-solid fa-pen-to-square"></i> แก้ไขช่วงเวลาเช็คชื่อ';
+  
+  // Swap Submit Buttons
+  const formActions = document.getElementById('session-form-actions');
+  formActions.innerHTML = `
+    <div style="display: flex; gap: 10px;">
+      <button type="submit" class="btn btn-primary" style="flex: 1;"><i class="fa-solid fa-floppy-disk"></i> บันทึกการแก้ไข</button>
+      <button type="button" class="btn btn-secondary-outline" onclick="cancelEditSession()"><i class="fa-solid fa-xmark"></i> ยกเลิก</button>
+    </div>
+  `;
+  
+  // Scroll to form (for mobile view comfort)
+  document.getElementById('session-form').scrollIntoView({ behavior: 'smooth' });
+}
+
+// Cancel Edit Mode
+function cancelEditSession() {
+  editingSessionId = null;
+  
+  // Reset Form
+  document.getElementById('session-form').reset();
+  
+  // Reset UI Card Header
+  const formCard = document.querySelector('#sect-sessions .card:first-child');
+  formCard.querySelector('h2').innerHTML = '<i class="fa-regular fa-clock"></i> ตั้งค่าช่วงเวลาเช็คชื่อใหม่';
+  
+  // Restore original Submit button
+  const formActions = document.getElementById('session-form-actions');
+  formActions.innerHTML = `
+    <button type="submit" class="btn btn-primary btn-block"><i class="fa-solid fa-calendar-plus"></i> บันทึกและเปิดเซสชันนี้</button>
+  `;
 }
 
 // Toggle Session active status
@@ -342,10 +416,15 @@ async function toggleSession(sessionId) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId })
     });
-    if (!res.ok) throw new Error('Toggle failed');
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      alert(errData.error || 'ไม่สามารถเปิดเช็คชื่อได้เนื่องจากไม่อยู่ในช่วงเวลาเรียน');
+      return;
+    }
     fetchDatabase();
   } catch (err) {
     console.error('Error toggling session:', err);
+    alert('เกิดข้อผิดพลาดในการเชื่อมต่อกับเซิร์ฟเวอร์');
   }
 }
 

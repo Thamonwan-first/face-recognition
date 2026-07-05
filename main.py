@@ -212,22 +212,34 @@ class Pi5PortraitDash(tk.Tk):
         # 2. Log and Attendance Container (Under Camera)
         self.log_container = tk.Frame(self, bg="#050505")
         self.log_container.grid(row=2, column=0, sticky="nsew", padx=15, pady=5)
-        self.log_container.columnconfigure(0, weight=6) # 60% width for attendance list
-        self.log_container.columnconfigure(1, weight=4) # 40% width for system log
+        self.log_container.columnconfigure(0, weight=1) # 100% width for attendance list
         self.log_container.rowconfigure(0, weight=1)
 
-        # 2a. Attendance List Card (Left)
+        # 2a. Attendance List Card (Full Width)
         self.attendance_frame = tk.Frame(self.log_container, bg="#161b22", highlightthickness=1, highlightbackground="#30363d")
-        self.attendance_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 5), pady=5)
+        self.attendance_frame.grid(row=0, column=0, sticky="nsew", padx=0, pady=5)
+        
+        # Header sub-frame to keep title and status dot on the same top line
+        self.attendance_header = tk.Frame(self.attendance_frame, bg="#161b22")
+        self.attendance_header.pack(fill=tk.X, padx=10, pady=(5, 2))
         
         self.lbl_attendance_title = tk.Label(
-            self.attendance_frame, 
+            self.attendance_header, 
             text="📋 รายชื่อที่เช็คชื่อเข้าเรียนในวิชานี้ (0 คน)", 
             font=("Segoe UI", 10, "bold"), 
             fg="#ffcc00", 
             bg="#161b22"
         )
-        self.lbl_attendance_title.pack(anchor="w", padx=10, pady=(5, 2))
+        self.lbl_attendance_title.pack(side=tk.LEFT, anchor="w")
+        
+        self.lbl_status_dot = tk.Label(
+            self.attendance_header, 
+            text="● Online", 
+            bg="#161b22", 
+            fg="#00ff00", 
+            font=("Segoe UI", 10, "bold")
+        )
+        self.lbl_status_dot.pack(side=tk.RIGHT, anchor="e")
         
         self.attendance_list = scrolledtext.ScrolledText(
             self.attendance_frame, 
@@ -244,29 +256,6 @@ class Pi5PortraitDash(tk.Tk):
         self.attendance_list.tag_config("late", foreground="#ffa500")
         self.attendance_list.tag_config("offline", foreground="#00ffff")
         self.attendance_list.config(state=tk.DISABLED)
-
-        # 2b. System Event Log Card (Right)
-        self.system_frame = tk.Frame(self.log_container, bg="#161b22", highlightthickness=1, highlightbackground="#30363d")
-        self.system_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 0), pady=5)
-        
-        lbl_sys_title = tk.Label(
-            self.system_frame, 
-            text="💻 บันทึกเหตุการณ์ระบบ", 
-            font=("Segoe UI", 10, "bold"), 
-            fg="#58a6ff", 
-            bg="#161b22"
-        )
-        lbl_sys_title.pack(anchor="w", padx=10, pady=(5, 2))
-        
-        self.log = scrolledtext.ScrolledText(
-            self.system_frame, 
-            bg="#0d1117", 
-            fg="#00ff00", 
-            font=("Monospace", 8), 
-            bd=0, 
-            height=8
-        )
-        self.log.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
 
         # 3. Control Panel (Bottom)
         self.p_frame = tk.Frame(self, bg="#0b0f19") 
@@ -340,6 +329,11 @@ class Pi5PortraitDash(tk.Tk):
         self.top_banner.config(bg=bg_color)
         self.lbl_session_info.config(bg=bg_color, fg=fg_color, text=text)
         self.lbl_clock.config(bg=bg_color)
+        
+        if hasattr(self, 'lbl_status_dot'):
+            status_text = "● Offline" if is_offline else "● Online"
+            status_color = "#ff3333" if is_offline else "#00ff00"
+            self.lbl_status_dot.config(fg=status_color, text=status_text)
 
     def get_offline_records(self):
         offline_file = os.path.join(self.script_dir, "offline_attendance.json")
@@ -643,8 +637,7 @@ class Pi5PortraitDash(tk.Tk):
             self.manual_train()
 
     def add_log(self, m): 
-        self.log.insert(tk.END, f"{datetime.now().strftime('%H:%M:%S')}> {m}\n") 
-        self.log.see(tk.END) 
+        print(f"{datetime.now().strftime('%H:%M:%S')}> {m}")
 
     def main_loop(self): 
         is_reg = len(self.ent_name.get().strip()) > 0

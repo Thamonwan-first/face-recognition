@@ -407,6 +407,17 @@ app.post('/api/sessions/toggle', (req, res) => {
 
   const newState = !session.active;
   if (newState) {
+    // Check if within date and time boundary
+    const now = new Date();
+    const offset = now.getTimezoneOffset();
+    const localNow = new Date(now.getTime() - (offset * 60 * 1000));
+    const todayStr = localNow.toISOString().split('T')[0];
+    const currentTimeStr = localNow.toISOString().split('T')[1].substring(0, 5);
+
+    if (session.date !== todayStr || currentTimeStr < session.startTime || currentTimeStr > session.endTime) {
+      return res.status(400).json({ error: 'ไม่สามารถเปิดเช็คชื่อได้เนื่องจากไม่อยู่ในช่วงวันเวลาเรียนของคาบนี้' });
+    }
+
     // If turning on, turn off all other sessions
     db.sessions.forEach(s => s.active = false);
   }
@@ -414,6 +425,41 @@ app.post('/api/sessions/toggle', (req, res) => {
   saveDb();
 
   sendSseAlert('session_change', { activeSession: newState ? session : null });
+  res.json({ success: true, session });
+});
+
+// Update a session
+app.put('/api/sessions/:id', (req, res) => {
+  const { id } = req.params;
+  const { subjectCode, subjectName, date, startTime, endTime, lateAfter, location, instructorName } = req.body;
+  
+  if (!subjectCode || !subjectName || !date || !startTime || !endTime) {
+    return res.status(400).json({ error: 'กรุณากรอกรหัสวิชา, ชื่อวิชา, วันที่, เวลาเริ่ม และเวลาจบ' });
+  }
+
+  const session = db.sessions.find(s => s.id === id);
+  if (!session) {
+    return res.status(404).json({ error: 'ไม่พบคาบเรียนที่ต้องการแก้ไข' });
+  }
+
+  // Update session properties
+  session.subjectCode = subjectCode.trim();
+  session.subjectName = subjectName.trim();
+  session.className = `${subjectCode.trim()} - ${subjectName.trim()}`;
+  session.date = date;
+  session.startTime = startTime;
+  session.endTime = endTime;
+  session.lateAfter = lateAfter || startTime;
+  session.location = location ? location.trim() : '';
+  session.instructorName = instructorName ? instructorName.trim() : '';
+
+  saveDb();
+
+  // If this session is currently active, we broadcast the update!
+  if (session.active) {
+    sendSseAlert('session_change', { activeSession: session });
+  }
+
   res.json({ success: true, session });
 });
 
