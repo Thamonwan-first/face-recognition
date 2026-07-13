@@ -77,25 +77,61 @@ def ai_worker(frame_q, result_q, ctrl_ev, reload_ev, faces_dir, cache_path, rota
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480) 
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
+    latest_frame = [None]
+    frame_lock = threading.Lock()
+
+    # Thread สำหรับดึงเฟรมจากกล้องตลอดเวลา (Camera Grabber Thread) เพื่อความลื่นไหลของภาพแสดงผล
+    def grab_frames():
+        while ctrl_ev.is_set():
+            ret, frame = cap.read()
+            if not ret:
+                time.sleep(0.01)
+                continue
+
+            # หมุนภาพตามที่ตั้งไว้ใน UI
+            rot = rotation_val.value
+            if rot == 90: frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE) 
+            elif rot == 180: frame = cv2.rotate(frame, cv2.ROTATE_180) 
+            elif rot == 270: frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE) 
+
+            with frame_lock:
+                latest_frame[0] = frame.copy()
+
+            # ส่งเฟรมไปให้ GUI แสดงผลแบบ Real-time (ล้างคิวเก่าออกหากคิวเต็มเพื่อให้แสดงผลภาพล่าสุดเสมอ)
+            if frame_q.full():
+                try:
+                    frame_q.get_nowait()
+                except:
+                    pass
+            try:
+                frame_q.put_nowait(frame)
+            except:
+                pass
+
+            # พักเล็กน้อยเพื่อให้กล้องส่งเฟรมประมาณ 30 FPS และไม่แย่ง CPU เกินไป
+            time.sleep(0.03)
+
+    grab_thread = threading.Thread(target=grab_frames, daemon=True)
+    grab_thread.start()
+
+    # Main thread ของ ai_worker ทำหน้าที่ตรวจจับใบหน้าอย่างเดียว (AI Face Recognition Loop)
     while ctrl_ev.is_set(): 
         # เช็คสัญญาณรีโหลดข้อมูลใบหน้าใหม่
         if reload_ev.is_set():
             known_encs, known_names = load_encodings(cache_path)
             reload_ev.clear()
 
-        ret, frame = cap.read() 
-        if not ret: continue 
+        frame_to_process = None
+        with frame_lock:
+            if latest_frame[0] is not None:
+                frame_to_process = latest_frame[0].copy()
+                latest_frame[0] = None # เคลียร์หลังดึงไปประมวลผลแล้วเพื่อไม่ให้ทำซ้ำเฟรมเดิม
 
-        # หมุนภาพตามที่ตั้งไว้ใน UI
-        rot = rotation_val.value
-        if rot == 90: frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE) 
-        elif rot == 180: frame = cv2.rotate(frame, cv2.ROTATE_180) 
-        elif rot == 270: frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE) 
+        if frame_to_process is None:
+            time.sleep(0.01)
+            continue
 
-        if not frame_q.full(): 
-            frame_q.put(frame) 
-
-        small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25) 
+        small_frame = cv2.resize(frame_to_process, (0, 0), fx=0.25, fy=0.25) 
         rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB) 
          
         locs = face_recognition.face_locations(rgb_small, model="hog") 
@@ -110,8 +146,16 @@ def ai_worker(frame_q, result_q, ctrl_ev, reload_ev, faces_dir, cache_path, rota
                     name = known_names[np.argmin(dist)] 
             names.append(name) 
 
-        if not result_q.full(): 
-            result_q.put((locs, names)) 
+        # ส่งผลลัพธ์ไปที่ GUI (ล้างคิวเก่าออกหากคิวเต็ม)
+        if result_q.full():
+            try:
+                result_q.get_nowait()
+            except:
+                pass
+        try:
+            result_q.put_nowait((locs, names))
+        except:
+            pass
 
     cap.release() 
 
@@ -245,13 +289,14 @@ class Pi5PortraitDash(tk.Tk):
             self.attendance_frame, 
             bg="#0d1117", 
             fg="#cbd5e1", 
-            font=("Consolas", 9), 
+            font=("Segoe UI", 10), 
             bd=0, 
             height=8,
-            wrap=tk.NONE
+            wrap=tk.NONE,
+            tabs=('50', '200', '420', '540')
         )
         self.attendance_list.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
-        self.attendance_list.tag_config("header", foreground="#ffcc00", font=("Consolas", 9, "bold"))
+        self.attendance_list.tag_config("header", foreground="#ffcc00", font=("Segoe UI", 10, "bold"))
         self.attendance_list.tag_config("ontime", foreground="#00ff00")
         self.attendance_list.tag_config("late", foreground="#ffa500")
         self.attendance_list.tag_config("offline", foreground="#00ffff")
@@ -513,8 +558,8 @@ class Pi5PortraitDash(tk.Tk):
         self.attendance_list.delete("1.0", tk.END)
         
         # Header
-        header = f"{'ลำดับ':<6}{'รหัสนักศึกษา':<15}{'ชื่อ-นามสกุล':<20}{'เวลา':<9}{'สถานะ':<10}\n"
-        separator = "-" * 60 + "\n"
+        header = "ลำดับ\tรหัสนักศึกษา\tชื่อ-นามสกุล\tเวลา\tสถานะ\n"
+        separator = "─" * 75 + "\n"
         self.attendance_list.insert(tk.END, header, "header")
         self.attendance_list.insert(tk.END, separator)
         
@@ -522,11 +567,11 @@ class Pi5PortraitDash(tk.Tk):
             lbl = f"{idx}."
             std_id = item["id"]
             name = item["name"]
-            if len(name) > 16:
-                name = name[:13] + "..."
+            if len(name) > 22:
+                name = name[:19] + "..."
             time_val = item["time"]
             
-            self.attendance_list.insert(tk.END, f"{lbl:<6}{std_id:<15}{name:<20}{time_val:<9}")
+            self.attendance_list.insert(tk.END, f"{lbl}\t{std_id}\t{name}\t{time_val}\t")
             
             if item["is_offline"]:
                 status_str = f"{item['status']} (ออฟไลน์ 💾)\n"
