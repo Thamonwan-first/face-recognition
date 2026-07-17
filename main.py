@@ -469,14 +469,24 @@ class Pi5PortraitDash(tk.Tk):
         self.display_attendance_list(active_sess, sess_attendance, offline_records)
 
     def display_attendance_list(self, active_sess, sess_attendance, offline_records):
-        # Format helper
+        # Format helper (Converts UTC ISO time string to local time or fallback)
         def format_time_str(t_str):
             try:
                 if 'T' in t_str:
-                    t_parts = t_str.split('T')[1].split('.')[0]
-                    return t_parts # HH:MM:SS
+                    if t_str.endswith('Z'):
+                        # Replace Z with +00:00 for python 3.10 and older compatibility
+                        dt = datetime.fromisoformat(t_str.replace('Z', '+00:00'))
+                        return dt.astimezone().strftime('%H:%M:%S')
+                    else:
+                        dt = datetime.fromisoformat(t_str)
+                        return dt.strftime('%H:%M:%S')
                 return t_str[:19]
             except:
+                try:
+                    if 'T' in t_str:
+                        return t_str.split('T')[1].split('.')[0]
+                except:
+                    pass
                 return t_str
 
         # Log new check-ins to the system log (once per check-in)
@@ -559,7 +569,7 @@ class Pi5PortraitDash(tk.Tk):
         
         # Header
         header = "ลำดับ\tรหัสนักศึกษา\tชื่อ-นามสกุล\tเวลา\tสถานะ\n"
-        separator = "─" * 75 + "\n"
+        separator = "─" * 50 + "\n"
         self.attendance_list.insert(tk.END, header, "header")
         self.attendance_list.insert(tk.END, separator)
         
