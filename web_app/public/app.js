@@ -316,6 +316,15 @@ async function createSession(e) {
   const startTime = document.getElementById('sess-start').value;
   const endTime = document.getElementById('sess-end').value;
 
+  if (startTime >= endTime) {
+    alert('เวลาเริ่มต้นต้องมาก่อนเวลาสิ้นสุด');
+    return;
+  }
+  if (lateAfter && (lateAfter < startTime || lateAfter > endTime)) {
+    alert('เวลาสายต้องอยู่ระหว่างเวลาเริ่มต้นและเวลาสิ้นสุด');
+    return;
+  }
+
   try {
     let url = '/api/sessions';
     let method = 'POST';

@@ -372,6 +372,13 @@ app.post('/api/sessions', (req, res) => {
     return res.status(400).json({ error: 'กรุณากรอกรหัสวิชา, ชื่อวิชา, วันที่, เวลาเริ่ม และเวลาจบ' });
   }
 
+  if (startTime >= endTime) {
+    return res.status(400).json({ error: 'เวลาเริ่มต้นต้องมาก่อนเวลาสิ้นสุด' });
+  }
+  if (lateAfter && (lateAfter < startTime || lateAfter > endTime)) {
+    return res.status(400).json({ error: 'เวลาสายต้องอยู่ระหว่างเวลาเริ่มต้นและเวลาสิ้นสุด' });
+  }
+
   // Deactivate other sessions
   db.sessions.forEach(s => s.active = false);
 
@@ -435,6 +442,13 @@ app.put('/api/sessions/:id', (req, res) => {
   
   if (!subjectCode || !subjectName || !date || !startTime || !endTime) {
     return res.status(400).json({ error: 'กรุณากรอกรหัสวิชา, ชื่อวิชา, วันที่, เวลาเริ่ม และเวลาจบ' });
+  }
+
+  if (startTime >= endTime) {
+    return res.status(400).json({ error: 'เวลาเริ่มต้นต้องมาก่อนเวลาสิ้นสุด' });
+  }
+  if (lateAfter && (lateAfter < startTime || lateAfter > endTime)) {
+    return res.status(400).json({ error: 'เวลาสายต้องอยู่ระหว่างเวลาเริ่มต้นและเวลาสิ้นสุด' });
   }
 
   const session = db.sessions.find(s => s.id === id);

@@ -36,10 +36,20 @@
 **ความต้องการของระบบ:** Python 3.10 ขึ้นไป และ Node.js v20 ขึ้นไป
 
 *   **ติดตั้งฝั่ง Python (กล้องสแกน):**
-    ```bash
-    pip install opencv-python face-recognition requests pillow
-    ```
-    *(หมายเหตุ: ต้องทำการติดตั้ง dlib ให้เรียบร้อยก่อน ซึ่งสามารถลงผ่านไฟล์ .whl ในโฟลเดอร์โครงการได้)*
+    *   **สำหรับ Windows (เครื่องพัฒนา):** ไม่ต้องติดตั้ง `cmake` หรือคอมไพเลอร์เพิ่ม สามารถติดตั้ง `dlib` ได้ทันทีจากไฟล์สำเร็จรูป (.whl) ในโครงการ:
+        ```bash
+        pip install dlib-19.22.99-cp310-cp310-win_amd64.whl
+        ```
+    *   **สำหรับ Raspberry Pi 5 (หรือ Linux อื่นๆ):** ต้องติดตั้งตัวคอมไพเลอร์และ `cmake` เพื่อคอมไพล์โค้ด C++ ของ `dlib` ก่อนติดตั้ง:
+        ```bash
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake g++ libx11-dev libatlas-base-dev
+        pip install dlib
+        ```
+    *   จากนั้นติดตั้งโมดูลหลักตัวอื่นๆ:
+        ```bash
+        pip install opencv-python face-recognition requests pillow
+        ```
 
 *   **ติดตั้งฝั่ง Web App (เว็บจัดการ):**
     ```bash
@@ -47,7 +57,9 @@
     npm install
     ```
 
-### 2. วิธีการรันระบบเพื่อสแกนเช็คชื่อ
+---
+
+### 2. วิธีการรันระบบเพื่อสแกนเช็คชื่อ (รันใช้งานปกติ/พัฒนาโปรเจกต์)
 ต้องเปิดใช้งานทั้ง 2 ส่วนควบคู่กัน:
 
 1.  **เปิดเว็บเซิร์ฟเวอร์ (Terminal 1):**
@@ -64,13 +76,15 @@
 
 ---
 
+### 3. การรันระบบและเปิดใช้งานอัตโนมัติบน Raspberry Pi 5 (Autostart)
+สำหรับเครื่องที่ติดตั้งเพื่อใช้งานจริงในตู้เช็คชื่อสแกนหน้า สามารถตั้งค่าให้ระบบรันขึ้นมาพร้อมกันได้ง่ายๆ:
+*   **รันผ่านสคริปต์เดียว:** รันไฟล์ [run_local.sh](file:///D:/face_recognition/run_local.sh) เพื่อเปิดทั้ง Web App (Node.js), บราวเซอร์รายงานผล และกล้องสแกนหน้า (Python) พร้อมกันโดยอัตโนมัติ:
+    ```bash
+    ./run_local.sh
+    ```
+*   **การตั้งค่า Autostart เมื่อเปิดเครื่อง:** สามารถตั้งค่าให้ระบบเรียกใช้ [run_local.sh](file:///D:/face_recognition/run_local.sh) เมื่อเข้าสู่หน้าจอ Desktop โดยอัตโนมัติ
+*   อ่านขั้นตอนทั้งหมดอย่างละเอียดได้ที่คู่มือ: [.agents/skills/face_recognition_pi5/SKILL.md](file:///D:/face_recognition/.agents/skills/face_recognition_pi5/SKILL.md)
+
 ## 💾 การกู้คืนและสำรองข้อมูลระบบ (Backup & Recovery)
 * **การสำรองข้อมูล (Manual Backup):** เพียงทำการคัดลอกไฟล์ `web_app/db.json` และโฟลเดอร์ `faces/` เก็บไว้ ท่านจะสามารถกู้ข้อมูลทั้งหมดคืนมาได้ทันทีเมื่อระบบมีปัญหา
 * **การดาวน์โหลดไฟล์สำรอง:** สามารถไปที่หน้าเว็บแอปแท็บ **"สำรองระบบ (Backup/Restore)"** แล้วกดปุ่มดาวน์โหลดไฟล์ข้อมูล `.json` เพื่อนำไปบันทึกเก็บไว้ได้โดยตรง
-
-*(สำหรับคำแนะนำในการรันและตั้งค่าแบบอัตโนมัติบนบอร์ด **Raspberry Pi 5** สามารถดูคู่มือได้ที่ไฟล์: [.agents/skills/face_recognition_pi5/SKILL.md](file:///D:/face_recognition/.agents/skills/face_recognition_pi5/SKILL.md))*
-
-
-
-pkill -f server.js
-node server.js
