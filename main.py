@@ -528,6 +528,7 @@ class Pi5PortraitDash(tk.Tk):
             })
             
         # Add unsynced offline check-ins
+        added_offline_ids = set()
         for rec in offline_records:
             name_id = rec.get("name_id", "")
             hyphen_idx = name_id.find('-')
@@ -538,7 +539,9 @@ class Pi5PortraitDash(tk.Tk):
                 std_id = name_id.strip()
                 std_name = ""
                 
-            if std_id.upper() not in online_student_ids:
+            std_id_upper = std_id.upper()
+            if std_id_upper not in online_student_ids and std_id_upper not in added_offline_ids:
+                added_offline_ids.add(std_id_upper)
                 time_disp = format_time_str(rec.get("time", ""))
                 status_thai = "ตรงเวลา"
                 if active_sess and active_sess.get("lateAfter"):
@@ -744,6 +747,9 @@ class Pi5PortraitDash(tk.Tk):
         self.after(16, self.main_loop) 
 
     def save_offline_attendance(self, name):
+        parts = name.split('-', 1)
+        student_id_to_check = parts[0].strip().upper()
+
         offline_file = os.path.join(self.script_dir, "offline_attendance.json")
         with self.offline_lock:
             records = []
@@ -753,6 +759,23 @@ class Pi5PortraitDash(tk.Tk):
                         records = json.load(f)
                 except:
                     pass
+            
+            # Check if this student is already in offline records
+            for r in records:
+                r_name = r.get("name_id", "")
+                r_parts = r_name.split('-', 1)
+                r_id = r_parts[0].strip().upper()
+                if r_id == student_id_to_check:
+                    # Already logged offline, skip adding it again
+                    return
+            
+            # Check if this student is already in online records
+            if hasattr(self, 'last_attendance_records') and self.last_attendance_records:
+                for a in self.last_attendance_records:
+                    a_id = a.get("studentId", "").strip().upper()
+                    if a_id == student_id_to_check:
+                        # Already logged online, skip adding it again
+                        return
             
             now_iso = datetime.now().isoformat()
             records.append({"name_id": name, "time": now_iso})
