@@ -620,6 +620,36 @@ class Pi5PortraitDash(tk.Tk):
         self.is_training = True
         self.add_log("AI: Training/Updating Database...")
         
+        # ดึงรายชื่อนักศึกษาปัจจุบันจากเซิร์ฟเวอร์เพื่อลบข้อมูลคนที่ถูกลบออกจากหลังบ้านแล้ว
+        try:
+            base_url = WEB_APP_URL.rsplit('/', 2)[0]
+            res = requests.get(f"{base_url}/db", timeout=3)
+            if res.status_code == 200:
+                server_db = res.json()
+                active_students = server_db.get("students", [])
+                
+                # รวบรวมรายชื่อของโฟลเดอร์ที่ควรมีอยู่จริงบนเซิร์ฟเวอร์
+                valid_folders = set()
+                for s in active_students:
+                    s_id = s.get("id", "").strip()
+                    s_name = s.get("name", "").strip()
+                    valid_folders.add(f"{s_id}-{s_name}".strip())
+                    valid_folders.add(s_id)
+                
+                # ตรวจเช็คเพื่อคลีนข้อมูลคนที่ไม่อยู่ในฐานข้อมูลเซิร์ฟเวอร์แล้ว
+                local_folders = [f for f in os.listdir(self.faces_dir) if os.path.isdir(os.path.join(self.faces_dir, f))]
+                for folder in local_folders:
+                    if active_students:
+                        parts = folder.split('-', 1)
+                        folder_id = parts[0].strip()
+                        if folder not in valid_folders and folder_id not in valid_folders:
+                            folder_path = os.path.join(self.faces_dir, folder)
+                            self.add_log(f"🗑️ คลีนข้อมูล: ลบโฟลเดอร์ใบหน้า '{folder}' เนื่องจากไม่มีรายชื่อในเซิร์ฟเวอร์แล้ว")
+                            import shutil
+                            shutil.rmtree(folder_path, ignore_errors=True)
+        except Exception as e:
+            self.add_log(f"⚠️ ไม่สามารถซิงก์ข้อมูลรายชื่อเพื่อคลีนรูปภาพได้: {e}")
+            
         cache = {}
         if os.path.exists(self.cache_path):
             try:
