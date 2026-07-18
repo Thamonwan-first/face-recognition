@@ -601,6 +601,28 @@ app.put('/api/students/:id', (req, res) => {
   res.json({ success: true, student });
 });
 
+// Get list of student photo filenames
+app.get('/api/students/:id/photos', (req, res) => {
+  const { id } = req.params;
+  try {
+    if (fs.existsSync(FACES_DIR)) {
+      const dirs = fs.readdirSync(FACES_DIR);
+      const studentFolderName = dirs.find(d => d.startsWith(id + '-'));
+      if (studentFolderName) {
+        const fullPath = path.join(FACES_DIR, studentFolderName);
+        const files = fs.readdirSync(fullPath).filter(f => {
+          const lower = f.toLowerCase();
+          return lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png');
+        });
+        return res.json({ success: true, folder: studentFolderName, photos: files });
+      }
+    }
+    res.json({ success: true, folder: null, photos: [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Delete student
 app.delete('/api/students/:id', (req, res) => {
   const { id } = req.params;

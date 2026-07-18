@@ -636,7 +636,7 @@ class Pi5PortraitDash(tk.Tk):
                     valid_folders.add(f"{s_id}-{s_name}".strip())
                     valid_folders.add(s_id)
                 
-                # ตรวจเช็คเพื่อคลีนข้อมูลคนที่ไม่อยู่ในฐานข้อมูลเซิร์ฟเวอร์แล้ว
+                # 1. ตรวจเช็คเพื่อคลีนข้อมูลคนที่ไม่อยู่ในฐานข้อมูลเซิร์ฟเวอร์แล้ว
                 local_folders = [f for f in os.listdir(self.faces_dir) if os.path.isdir(os.path.join(self.faces_dir, f))]
                 for folder in local_folders:
                     if active_students:
@@ -647,6 +647,43 @@ class Pi5PortraitDash(tk.Tk):
                             self.add_log(f"🗑️ คลีนข้อมูล: ลบโฟลเดอร์ใบหน้า '{folder}' เนื่องจากไม่มีรายชื่อในเซิร์ฟเวอร์แล้ว")
                             import shutil
                             shutil.rmtree(folder_path, ignore_errors=True)
+                
+                # 2. ดาวน์โหลดรูปภาพคนใหม่ที่ยังไม่มีอยู่ในเครื่องลูกข่าย (Pi)
+                for s in active_students:
+                    s_id = s.get("id", "").strip()
+                    s_name = s.get("name", "").strip()
+                    if not s_id or not s_name: continue
+                    
+                    folder_name = f"{s_id}-{s_name}"
+                    local_student_dir = os.path.join(self.faces_dir, folder_name)
+                    
+                    # ขอรายชื่อรูปภาพจาก API: GET /api/students/:id/photos
+                    try:
+                        photo_res = requests.get(f"{base_url}/students/{s_id}/photos", timeout=4)
+                        if photo_res.status_code == 200:
+                            photo_data = photo_res.json()
+                            server_folder = photo_data.get("folder")
+                            photos = photo_data.get("photos", [])
+                            
+                            if photos and server_folder:
+                                # สร้างโฟลเดอร์เครื่องลูกเตรียมไว้ (ถ้ายังไม่มี)
+                                os.makedirs(local_student_dir, exist_ok=True)
+                                
+                                for photo_file in photos:
+                                    local_photo_path = os.path.join(local_student_dir, photo_file)
+                                    # หากรูปยังไม่เคยดาวน์โหลด ให้ดึงไฟล์ผ่าน HTTP static URL
+                                    if not os.path.exists(local_photo_path):
+                                        # ตัด /api ออกจาก base_url เพื่อหาเว็บพอร์ตหลัก
+                                        web_root = base_url.rsplit('/', 1)[0]
+                                        photo_url = f"{web_root}/faces/{server_folder}/{photo_file}"
+                                        
+                                        self.add_log(f"📥 ดาวน์โหลดรูปภาพ: {folder_name}/{photo_file}...")
+                                        img_res = requests.get(photo_url, timeout=5)
+                                        if img_res.status_code == 200:
+                                            with open(local_photo_path, 'wb') as f:
+                                                f.write(img_res.content)
+                    except Exception as e:
+                        self.add_log(f"⚠️ ไม่สามารถดึงรูปภาพของ {folder_name}: {e}")
         except Exception as e:
             self.add_log(f"⚠️ ไม่สามารถซิงก์ข้อมูลรายชื่อเพื่อคลีนรูปภาพได้: {e}")
             
