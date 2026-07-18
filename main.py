@@ -352,6 +352,7 @@ class Pi5PortraitDash(tk.Tk):
                         data = res.json()
                         sessions = data.get("sessions", [])
                         attendance = data.get("attendance", [])
+                        students = data.get("students", [])
                         
                         active_sess = None
                         for s in sessions:
@@ -360,6 +361,41 @@ class Pi5PortraitDash(tk.Tk):
                                 break
                         
                         self.after(0, self.update_session_ui, active_sess, attendance, False)
+                        
+                        # ตรวจสอบความสอดคล้องของรูปภาพในเครื่องกับฐานข้อมูลบนเซิร์ฟเวอร์แบบเรียลไทม์
+                        if students and os.path.exists(self.faces_dir):
+                            valid_folders = set()
+                            for s in students:
+                                s_id = s.get("id", "").strip()
+                                s_name = s.get("name", "").strip()
+                                valid_folders.add(f"{s_id}-{s_name}".strip())
+                                valid_folders.add(s_id)
+                            
+                            local_folders = [f for f in os.listdir(self.faces_dir) if os.path.isdir(os.path.join(self.faces_dir, f))]
+                            
+                            mismatch = False
+                            # 1. เช็คว่ามีโฟลเดอร์ของคนที่ถูกลบไปแล้วคาอยู่ในเครื่องไหม
+                            for folder in local_folders:
+                                parts = folder.split('-', 1)
+                                folder_id = parts[0].strip()
+                                if folder not in valid_folders and folder_id not in valid_folders:
+                                    mismatch = True
+                                    break
+                            
+                            # 2. เช็คว่ามีคนใหม่บนเว็บที่เครื่องยังไม่มีรูปหรือโฟลเดอร์ไหม
+                            if not mismatch:
+                                for s in students:
+                                    s_id = s.get("id", "").strip()
+                                    s_name = s.get("name", "").strip()
+                                    folder_name = f"{s_id}-{s_name}"
+                                    if folder_name not in local_folders:
+                                        mismatch = True
+                                        break
+                            
+                            # หากพบข้อมูลไม่ตรงกันและไม่ได้กำลังเทรนอยู่ ให้สั่งประมวลผลซิงก์ใหม่ทันที
+                            if mismatch and not getattr(self, 'is_training', False):
+                                self.add_log("🔄 ตรวจพบความเปลี่ยนแปลงของนักเรียนบนเซิร์ฟเวอร์ เริ่มทำการซิงก์รูปภาพและปรับโมเดล AI...")
+                                self.manual_train()
                 except Exception as e:
                     self.after(0, self.update_session_ui, None, [], True)
                 
