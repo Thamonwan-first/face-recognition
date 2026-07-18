@@ -53,7 +53,7 @@ class PythonAPIHandler(BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
 
-# --------------------------------------------------------- 
+# --------------------------------------------แล้วอันเก่า------------- 
 # FUNCTION: AI CORE PROCESS
 # --------------------------------------------------------- 
 def load_encodings(cache_path):
@@ -683,13 +683,39 @@ class Pi5PortraitDash(tk.Tk):
             self.ent_name.delete(0, tk.END); self.capture_count = 0
             self.btn_capture.config(text="📸 CAPTURE (0/10)")
             
-            # ส่งสัญญาณซิงก์นักศึกษาใหม่ไปยังเว็บแอปเพื่อเพิ่มลง db.json อัตโนมัติ
+            # ส่งสัญญาณและอัปโหลดรูปถ่าย 10 รูปของนักศึกษาไปยังเว็บแอปเพื่อเพิ่มลงระบบโดยตรงผ่าน HTTP API
             def _sync_web():
                 try:
                     base_url = WEB_APP_URL.rsplit('/', 2)[0]
-                    requests.post(f"{base_url}/students/sync", timeout=4)
-                except:
-                    pass
+                    # แยก student_id และ name ออกจากกัน (ตัวอย่าง: "12345-Somchai")
+                    parts = name.split('-', 1)
+                    student_id = parts[0].strip()
+                    student_name = parts[1].strip() if len(parts) > 1 else name
+                    
+                    student_dir = os.path.join(self.faces_dir, name)
+                    if os.path.exists(student_dir):
+                        photo_files = [f for f in os.listdir(student_dir) if f.endswith(('.jpg', '.jpeg', '.png'))]
+                        multiple_files = []
+                        opened_files = []
+                        
+                        # รวบรวมไฟล์รูปภาพทั้งหมดเพื่อเตรียมส่ง
+                        for pf in photo_files[:15]:
+                            file_path = os.path.join(student_dir, pf)
+                            f_obj = open(file_path, 'rb')
+                            opened_files.append(f_obj)
+                            multiple_files.append(('photo', (pf, f_obj, 'image/jpeg')))
+                        
+                        # ส่ง payload และรูปภาพผ่าน HTTP POST API /api/students (Port 5000)
+                        payload = {'studentId': student_id, 'name': student_name}
+                        res = requests.post(f"{base_url}/students", data=payload, files=multiple_files, timeout=10)
+                        
+                        # ปิดไฟล์หลังจากส่งเรียบร้อย
+                        for f_obj in opened_files:
+                            f_obj.close()
+                            
+                        print("Upload status:", res.status_code, res.text)
+                except Exception as e:
+                    print("Error syncing student web API:", e)
             threading.Thread(target=_sync_web, daemon=True).start()
             
             self.manual_train()
