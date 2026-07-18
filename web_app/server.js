@@ -21,8 +21,25 @@ function getLocalIpAddress() {
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+let lastClientIp = '127.0.0.1';
+
 app.use(cors());
 app.use(express.json());
+
+// Track last client IP (e.g. from Python GUI app on Raspberry Pi 5) for /reload trigger
+app.use((req, res, next) => {
+  const ip = req.headers['x-forwarded-for'] || req.ip || req.connection.remoteAddress;
+  if (ip) {
+    let cleanIp = ip.includes(',') ? ip.split(',')[0].trim() : ip.trim();
+    if (cleanIp.startsWith('::ffff:')) {
+      cleanIp = cleanIp.substring(7);
+    }
+    if (cleanIp !== '::1' && cleanIp !== '127.0.0.1') {
+      lastClientIp = cleanIp;
+    }
+  }
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Serve photos from the faces folder as static assets
@@ -203,7 +220,7 @@ function sendSseAlert(type, payload) {
 // Trigger python reload
 function notifyPythonReload() {
   const options = {
-    hostname: '127.0.0.1',
+    hostname: lastClientIp,
     port: 5001,
     path: '/reload',
     method: 'POST',

@@ -15,7 +15,7 @@ from PIL import Image as PILImage, ImageTk, ImageDraw, ImageFont
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # --- CONFIGURATION --- 
-WEB_APP_URL = "http://localhost:5000/api/attendance/checkin"
+WEB_APP_URL = "https://pinkseals.xyz/api/attendance/checkin"
 
 # --------------------------------------------------------- 
 # GLOBAL APP INSTANCE & CONTROL HTTP SERVER FOR WEB APP
@@ -826,7 +826,7 @@ class Pi5PortraitDash(tk.Tk):
                 
             try:
                 # ส่งรายการออฟไลน์ทั้งหมดไปซิงค์กับเว็บแอป
-                res = requests.post("http://localhost:5000/api/attendance/sync_offline", json={"records": records}, timeout=5)
+                res = requests.post("https://pinkseals.xyz/api/attendance/sync_offline", json={"records": records}, timeout=5)
                 if res.status_code == 200:
                     self.add_log(f"🔄 Sync: อัปโหลดประวัติสแกนออฟไลน์ {len(records)} รายการขึ้นเว็บสำเร็จ!")
                     try: os.remove(temp_sync_file)

@@ -16,3 +16,8 @@ faces/
 *.png
 
 *.pkl
+
+# Node.js dependencies and database
+web_app/node_modules/
+web_app/db.json
+offline_attendance.json

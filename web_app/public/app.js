@@ -85,7 +85,9 @@ async function fetchDatabase() {
       window.serverIp = data.serverIp;
       const statusSub = document.querySelector('.status-subtext');
       if (statusSub) {
-        statusSub.innerHTML = `IP: <a href="http://${data.serverIp}:5000" target="_blank" style="color: var(--primary); font-weight: 600; text-decoration: none;">http://${data.serverIp}:5000</a>`;
+        const currentProto = window.location.protocol;
+        const currentPort = window.location.port ? `:${window.location.port}` : '';
+        statusSub.innerHTML = `IP: <a href="${currentProto}//${data.serverIp}${currentPort}" target="_blank" style="color: var(--primary); font-weight: 600; text-decoration: none;">${currentProto}//${data.serverIp}${currentPort}</a>`;
       }
     }
 
